@@ -7,6 +7,9 @@ edition = "2021"
 
 [dependencies]
 bootloader = "0.9.23"
+# volatile = "0.4.6" requires to implement Deref Trait, cannot do
+volatile = "0.2.6" # TODO maybe implement it myself ? 
+
 
 [profile.dev]
 panic = "abort"
