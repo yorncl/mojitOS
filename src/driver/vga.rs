@@ -2,6 +2,7 @@
 // A simple vga text driver
 use crate::klib::mem;
 use volatile::Volatile;
+use core::fmt::Write;
 
 const HEIGHT: usize = 25;
 const WIDTH: usize = 80;
@@ -76,6 +77,17 @@ impl VGA {
             }
             i += 1;
          }
+    }
+}
+
+
+// TODO probably temp
+impl Write for VGA
+{
+    fn write_str(&mut self, s:&str) -> core::fmt::Result
+    {
+        self.puts(&s.as_bytes());
+        Ok(())
     }
 
 }

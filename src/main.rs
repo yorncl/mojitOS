@@ -5,8 +5,26 @@ use core::panic::PanicInfo;
 
 mod klib { pub mod mem; }
 mod driver { pub mod vga; }
+mod arch {
+    pub mod x86 {
+        pub mod gdt;
+        pub mod pic;
+        pub mod io;
+        pub mod idt;
+    }
+}
+use core::fmt::Write;
+use arch::x86::gdt;
+use arch::x86::pic;
+use arch::x86::idt;
 use driver::vga;
 
+use core::arch::asm;
+
+// use core::fmt;
+
+
+pub static mut VGA_INSTANCE: Option<vga::VGA> = None;
 
 /// This function is called on panic.
 #[panic_handler]
@@ -14,13 +32,60 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
-// static HELLO: &[u8] = b"Super les gars c'est cool";
-static HELLO: &[u8] = b"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n";
+
+pub fn get_cpu_mode() -> &'static str {
+    let mode: u64;
+    unsafe {
+        asm!(
+            "mov {0}, cr0",
+            "and rax, 0x1",
+            out(reg) mode,
+            options(nostack, preserves_flags)
+        );
+    }
+
+    if mode == 0 {
+        "real mode"
+    } else if mode == 1 {
+        "protected mode"
+    } 
+    else {
+        "wtf"
+    }
+}
+
+#[inline(always)]
+fn get_flags() -> u32 {
+    let flags: u32;
+    unsafe {
+        asm!("pushf"," pop {}",out(reg) flags);
+    }
+    flags
+}
+
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
 
-    let mut vga_drv = vga::VGA::new();
-    vga_drv.puts(HELLO);
+    unsafe {
+        VGA_INSTANCE = Some(vga::VGA::new());
+        write!(VGA_INSTANCE.as_mut().unwrap(), "CPU mode: {}\n", get_cpu_mode()); // TODO log macro
+
+        gdt::load();
+
+        let flags = get_flags();
+        if (flags & (1 << 9)) != 0 {
+            write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts enabled\n");
+        } else {
+            write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts disabled\n");
+        }
+
+
+        write!(VGA_INSTANCE.as_mut().unwrap(), "Loaded GDT\n");
+        pic::setup(); // TODO error handling in rust 
+        write!(VGA_INSTANCE.as_mut().unwrap(), "PIC setup\n");
+        idt::setup();
+    }
+
     loop {}
 }
