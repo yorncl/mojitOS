@@ -63,16 +63,24 @@ fn get_flags() -> u32 {
     flags
 }
 
+#[no_mangle]
+fn kloop() -> !
+{
+    unsafe {
+        asm!("sti");
+        asm!("int 0x21");
+        asm!("cli");
+    }
+    loop {}
+}
 
 #[no_mangle]
-pub extern "C" fn _start() -> ! {
-
+fn kmain() -> !
+{
     unsafe {
+        asm!("cli"); // TODO options
         VGA_INSTANCE = Some(vga::VGA::new());
         write!(VGA_INSTANCE.as_mut().unwrap(), "CPU mode: {}\n", get_cpu_mode()); // TODO log macro
-
-        gdt::load();
-
         let flags = get_flags();
         if (flags & (1 << 9)) != 0 {
             write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts enabled\n");
@@ -81,11 +89,26 @@ pub extern "C" fn _start() -> ! {
         }
 
 
+        gdt::load();
         write!(VGA_INSTANCE.as_mut().unwrap(), "Loaded GDT\n");
+
+        let flags = get_flags();
+        if (flags & (1 << 9)) != 0 {
+            write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts enabled\n");
+        } else {
+            write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts disabled\n");
+        }
+    
+
         pic::setup(); // TODO error handling in rust 
         write!(VGA_INSTANCE.as_mut().unwrap(), "PIC setup\n");
         idt::setup();
+        write!(VGA_INSTANCE.as_mut().unwrap(), "IDT setup\n");
     }
+    kloop();
+}
 
-    loop {}
+#[no_mangle]
+pub extern "C" fn _start() -> ! {
+    kmain();
 }

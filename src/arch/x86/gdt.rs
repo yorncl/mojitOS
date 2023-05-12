@@ -1,7 +1,12 @@
 use core::arch::asm;
+use core::arch::global_asm;
+use crate::VGA_INSTANCE;
+use core::fmt::Write;
+
 
 
 #[repr(C)]
+#[repr(packed)]
 pub struct GdtEntry {
     limit_low: u16,
     base_low: u16,
@@ -11,93 +16,103 @@ pub struct GdtEntry {
     base_high: u8,
 }
 
-const NENTRIES : usize = 5;
-
-static GDT : [GdtEntry; NENTRIES] = [
-    // null descriptor 
-    GdtEntry {
-        limit_low: 0,
-        base_low: 0,
-        base_mid: 0,
-        access: 0,
-        flags_limit_high: 0,
-        base_high: 0,
-    },
-    // kernel code segment
-    GdtEntry {
-        limit_low: 0xffff,
-        base_low: 0,
-        base_mid: 0,
-        access: 0x9a,
-        flags_limit_high: 0xcf,
-        base_high: 0,
-    },
-    // kernel data segment
-    GdtEntry {
-        limit_low: 0xffff,
-        base_low: 0,
-        base_mid: 0,
-        access: 0x92,
-        flags_limit_high: 0xcf,
-        base_high: 0,
-    },
-    // user code segment
-    GdtEntry {
-        limit_low: 0xffff,
-        base_low: 0,
-        base_mid: 0,
-        access: 0xfa,
-        flags_limit_high: 0xcf,
-        base_high: 0,
-    },
-    // user data segment
-    GdtEntry {
-        limit_low: 0xffff,
-        base_low: 0,
-        base_mid: 0,
-        access: 0xf2,
-        flags_limit_high: 0xcf,
-        base_high: 0,
-    },
-    // task state segment // TODO add tss ?
-    // GdtEntry {
-    //     limit_low: 0xffff,
-    //     base_low: 0,
-    //     base_mid: 0,
-    //     access: 0x89,
-    //     flags_limit_high: 0x0,
-    //     base_high: 0,
-    // },
-];
-
-#[repr(C)]
-struct GdtPtr {
-    limit : u16,
-    base : u32,
+impl Default for GdtEntry {
+    fn default() -> Self {
+        GdtEntry {
+            limit_low: 0,
+            base_low: 0,
+            base_mid: 0,
+            access: 0,
+            flags_limit_high: 0,
+            base_high: 0,
+        }
+    }
 }
 
-static mut GDT_PTR : GdtPtr = GdtPtr {limit : 0, base : 0};
+impl Clone for GdtEntry 
+{
+    fn clone(&self) -> Self {
+        GdtEntry {
+            limit_low: self.limit_low,
+            base_low: self.base_low,
+            base_mid: self.base_mid,
+            access: self.access,
+            flags_limit_high: self.flags_limit_high,
+            base_high: self.base_high,
+        }
+    }
+}
 
-// pub fn init() -> GDT
-// {
-//     GDT
-//     {
-//     }
-// }
+
+impl Copy for GdtEntry {}
+
+const NENTRIES : usize = 6;
+
+
+static mut GDT : [GdtEntry; NENTRIES] = [
+    GdtEntry { limit_low: 0, base_low: 0, base_mid: 0, access: 0, flags_limit_high: 0, base_high: 0, }; NENTRIES];
+
+#[repr(C)]
+#[repr(packed)]
+struct Gdtr {
+    size : u16, // size in bytes - 1
+    offset : u32, // offset of GDT (linear address, paging applies)
+}
+
+static mut GDTR : Gdtr = Gdtr {size : 0, offset : 0}; // pointer to the gdt table
+
+pub fn format_entry(base: u32, limit : u32, access_byte: u8, flags: u8) -> GdtEntry
+{
+    let mut entry = GdtEntry::default();
+    entry.base_low = (base & 0xffff) as u16;
+    entry.base_mid = ((base >> 16) & 0xff) as u8;
+    entry.base_high = ((base >> 24) & 0xff) as u8;
+    entry.limit_low = (limit & 0xffff) as u16;
+    entry.flags_limit_high = (((limit >> 16) & 0xf) as u8) | (flags & 0xf0);
+    entry.access = access_byte;
+    entry
+}
+
+
+global_asm!(include_str!("reload_segments.s"));
+extern "C" {
+    fn reload_segments();
+}
 
 pub fn load()
 {
-    let b : u32 = &GDT as *const _ as u32;
+    // setup basic segments
     unsafe {
-        GDT_PTR.limit = core::mem::size_of::<[GdtEntry; NENTRIES]>() as u16;
-        GDT_PTR.base = b;
-    };
-    unsafe {
-        asm!("cli","lgdt [{}]",
-             in(reg) &GDT_PTR,
-            options(nostack, preserves_flags)
-        );
+        GDT[0] = format_entry(0, 0, 0, 0);
+        GDT[1] = format_entry(0, 0xffffffff, 0x9a, 0xc);
+        GDT[2] = format_entry(0, 0xffffffff, 0x92, 0xc);
+        GDT[3] = format_entry(0, 0xffffffff, 0xfa, 0xc);
+        GDT[4] = format_entry(0, 0xffffffff, 0xf2, 0xc);
+        // GDT[5] = format_entry(0, 0xffffffff, 0x89, 0x0);// TODO tss entry
+        GDTR.size = ((GDT.len() * core::mem::size_of::<GdtEntry>()) - 1) as u16;
+        GDTR.offset = &GDT as *const _ as u32;
+        // write!(VGA_INSTANCE.as_mut().unwrap(), "GDTR size : {:x}, offset : {:x}\n", GDTR.size, GDTR.offset);
+        // print gdt address
+        write!(VGA_INSTANCE.as_mut().unwrap(), "GDT address : {:x}\n", &GDT as *const _ as u32);
+
+        // asm!("
+        //       lgdt [{}]
+        //       mov ax, 0x10
+        //       mov ds, ax
+        //       mov es, ax
+        //       mov fs, ax
+        //       mov gs, ax
+        //       mov ss, ax
+        //      ",
+        //      in(reg) &GDTR,
+        //     options(nostack, preserves_flags)
+        // );
+        reload_segments()
     }
+    unsafe {
+        write!(VGA_INSTANCE.as_mut().unwrap(), "GDT poitner : {:x}\n", &GDT as *const _ as u32);
+    }
+    
 }
 
 

@@ -33,7 +33,7 @@ enum ICW4 {
     SFNM = 0x10,        // Special fully nested (not)
 }
 
-fn pic_remap(offset1: u8, offset2: u8)
+fn pic_remap(offset1: i8, offset2: i8)
 {
     // save masks
     let master_mask = io::inb(PicPort::MasterData as u16);
@@ -41,24 +41,31 @@ fn pic_remap(offset1: u8, offset2: u8)
 
     io::outb(PicPort::MasterCommand as u16, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC reset
     io::wait();
+    io::outb(PicPort::SlaveCommand as u16, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC resetS
+    io::wait();
 
     // remap 
-    io::outb(PicPort::MasterData as u16, offset1);
+    io::outb(PicPort::MasterData as u16, offset1 as u8);
     io::wait();
-    io::outb(PicPort::SlaveData as u16, offset2);
+    io::outb(PicPort::SlaveData as u16, offset2 as u8);
     io::wait();
     io::outb(PicPort::MasterData as u16, 4);
     io::wait();
     io::outb(PicPort::SlaveData as u16, 2);
     io::wait();
 
+
+    io::outb(PicPort::MasterData as u16, ICW4::_8086 as u8);
+    io::wait();
+    io::outb(PicPort::SlaveData as u16, ICW4::_8086 as u8);
+    io::wait();
+
     // rewrite saved masks 
     io::outb(PicPort::MasterData as u16, master_mask);
-    io::wait(); // TODO necessary ?
     io::outb(PicPort::SlaveData as u16, slave_mask);
 }
 
 pub fn setup()
 {
-    pic_remap(0x20, 0x28); // the first 32 interrupts are reserved for the CPU exceptions
+    pic_remap(0x20 as i8, 0x28 as i8); // the first 32 interrupts are reserved for the CPU exceptions
 }
