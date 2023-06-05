@@ -1,4 +1,4 @@
-.globl reload_segments
+global reload_segments
 reload_segments:
         jmp   0x8:reload_CS
 reload_CS:
@@ -10,3 +10,7 @@ reload_CS:
         mov   SS, AX
         ret
     
+global load_gdt
+load_gdt:
+    ; infinite loop
+    jmp $

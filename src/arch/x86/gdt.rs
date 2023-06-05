@@ -1,5 +1,4 @@
 use core::arch::asm;
-use core::arch::global_asm;
 use crate::VGA_INSTANCE;
 use core::fmt::Write;
 
@@ -73,10 +72,8 @@ pub fn format_entry(base: u32, limit : u32, access_byte: u8, flags: u8) -> GdtEn
     entry
 }
 
-
-global_asm!(include_str!("reload_segments.s"));
 extern "C" {
-    fn reload_segments();
+    fn load_gdt(gdtr: *const Gdtr);
 }
 
 pub fn load()
@@ -93,24 +90,31 @@ pub fn load()
         GDTR.offset = &GDT as *const _ as u32;
         // write!(VGA_INSTANCE.as_mut().unwrap(), "GDTR size : {:x}, offset : {:x}\n", GDTR.size, GDTR.offset);
         // print gdt address
-        write!(VGA_INSTANCE.as_mut().unwrap(), "GDT address : {:x}\n", &GDT as *const _ as u32);
+        write!(VGA_INSTANCE.as_mut().unwrap(), "GDT address : {:x}\n", &GDT as *const _ as u32).unwrap();
 
+
+        asm!("
+              lgdt [{}]
+             ",
+             in(reg) &GDTR,
+            options(nostack, preserves_flags)
+        );
+        // asm!("pushl $0x8; 
+        //       pushl $1f; 
+        //       lretl; 
+        //       1:", options(att_syntax));
         // asm!("
-        //       lgdt [{}]
         //       mov ax, 0x10
         //       mov ds, ax
         //       mov es, ax
         //       mov fs, ax
         //       mov gs, ax
         //       mov ss, ax
-        //      ",
-        //      in(reg) &GDTR,
-        //     options(nostack, preserves_flags)
-        // );
-        reload_segments()
+        //       ", options(nostack, preserves_flags));
+        load_gdt(&GDTR);
     }
     unsafe {
-        write!(VGA_INSTANCE.as_mut().unwrap(), "GDT poitner : {:x}\n", &GDT as *const _ as u32);
+        write!(VGA_INSTANCE.as_mut().unwrap(), "GDT poitner : {:x}\n", &GDT as *const _ as u32).unwrap();
     }
     
 }

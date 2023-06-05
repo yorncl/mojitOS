@@ -6,10 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bootloader = "0.9.23"
-# volatile = "0.4.6" requires to implement Deref Trait, cannot do
 volatile = "0.2.6" # TODO maybe implement it myself ? 
-
 
 [profile.dev]
 panic = "abort"
@@ -17,6 +14,8 @@ panic = "abort"
 [profile.release]
 panic = "abort"
 
+[lib]
+crate-type = ["staticlib"]
 
 [features]
 inline-asm = []

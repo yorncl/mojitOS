@@ -28,7 +28,7 @@ static mut IDTR : IDTDESC = IDTDESC { size: 0, offset: 0 };
 pub fn test_handler()
 {
     unsafe {
-        write!(VGA_INSTANCE.as_mut().unwrap(), "test interrupt\n");
+        write!(VGA_INSTANCE.as_mut().unwrap(), "test interrupt\n").unwrap();
         asm!("cli; hlt", options(nostack));
         loop {}
     }
@@ -38,7 +38,7 @@ pub fn test_handler()
 pub fn exception_handler()
 {
     unsafe {
-        write!(VGA_INSTANCE.as_mut().unwrap(), "CPU Exception !!!!!\n");
+        write!(VGA_INSTANCE.as_mut().unwrap(), "CPU Exception !!!!!\n").unwrap();
         loop {}
     }
 }
@@ -68,7 +68,7 @@ pub fn setup()
             in(reg) &IDTR,
             options(nostack, preserves_flags)
         );
-        write!(VGA_INSTANCE.as_mut().unwrap(), "IDT pointer : {:x}, size : {:x}\n", &IDTR as *const _ as u32, IDT.len() * core::mem::size_of::<IdtEntry>() - 1);
+        write!(VGA_INSTANCE.as_mut().unwrap(), "IDT pointer : {:x}, size : {:x}\n", &IDTR as *const _ as u32, IDT.len() * core::mem::size_of::<IdtEntry>() - 1).unwrap();
         // write!(VGA_INSTANCE.as_mut().unwrap(), "IDT setup done\n");
     }
 }
