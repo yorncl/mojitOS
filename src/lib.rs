@@ -64,7 +64,8 @@ fn get_flags() -> u32 {
     let flags: u32;
     unsafe {
         write!(VGA_INSTANCE.as_mut().unwrap(), "BEFORE\n").unwrap(); // TODO log macro
-        asm!("pushf"," pop {}",out(reg) flags, options(nostack, preserves_flags));
+        asm!("pushf"," pop {}",out(reg) flags, options(nostack, preserves_flags)); // TODO this
+                                                                                   // crashes
         write!(VGA_INSTANCE.as_mut().unwrap(), "AFTER\n").unwrap(); // TODO log macro
     }
     flags
@@ -73,12 +74,10 @@ fn get_flags() -> u32 {
 #[no_mangle]
 fn kloop() -> !
 {
-    unsafe {
-        asm!("sti");
-        asm!("int 0x21");
-        asm!("cli");
+    loop {
+        unsafe {
+        }
     }
-    loop {}
 }
 
 
@@ -91,29 +90,33 @@ fn kmain() -> !
         VGA_INSTANCE = Some(vga::VGA::new());
         write!(VGA_INSTANCE.as_mut().unwrap(), "CPU mode: {}\n", get_cpu_mode()).unwrap(); // TODO log macro
         write!(VGA_INSTANCE.as_mut().unwrap(), "SALOPES\n").unwrap(); // TODO log macro
-        let flags = get_flags();
-        if (flags & (1 << 9)) != 0 {
-            write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts enabled\n").unwrap();
-        } else {
-            write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts disabled\n").unwrap();
-        }
+        // let flags = get_flags();
+        // if (flags & (1 << 9)) != 0 {
+        //     write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts enabled\n").unwrap();
+        // } else {
+        //     write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts disabled\n").unwrap();
+        // }
 
 
         gdt::load();
         write!(VGA_INSTANCE.as_mut().unwrap(), "Loaded GDT\n").unwrap();
 
-        let flags = get_flags();
-        if (flags & (1 << 9)) != 0 {
-            write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts enabled\n").unwrap();
-        } else {
-            write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts disabled\n").unwrap();
-        }
+        // let flags = get_flags();
+        // if (flags & (1 << 9)) != 0 {
+        //     write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts enabled\n").unwrap();
+        // } else {
+        //     write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupts disabled\n").unwrap();
+        // }
     
 
         pic::setup(); // TODO error handling in rust 
         write!(VGA_INSTANCE.as_mut().unwrap(), "PIC setup\n").unwrap();
         idt::setup();
         write!(VGA_INSTANCE.as_mut().unwrap(), "IDT setup\n").unwrap();
+    }
+    // enable interrupts back
+    unsafe {
+        asm!("sti");
     }
     kloop();
 }

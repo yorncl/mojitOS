@@ -1,4 +1,6 @@
 use crate::arch::x86::io;
+use crate::VGA_INSTANCE;
+use core::fmt::Write;
 
 #[allow(dead_code)]
 
@@ -38,6 +40,11 @@ fn pic_remap(offset1: i8, offset2: i8)
     // save masks
     let master_mask = io::inb(PicPort::MasterData as u16);
     let slave_mask = io::inb(PicPort::SlaveData as u16);
+    // print masks
+    unsafe {
+        write!(VGA_INSTANCE.as_mut().unwrap(), "master_mask : {:x}, slave_mask : {:x}\n", master_mask, slave_mask).unwrap();
+        write!(VGA_INSTANCE.as_mut().unwrap(), "Pic offsets : {} and {}", offset1, offset2).unwrap();
+    }
 
     io::outb(PicPort::MasterCommand as u16, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC reset
     io::wait();
@@ -61,7 +68,8 @@ fn pic_remap(offset1: i8, offset2: i8)
     io::wait();
 
     // rewrite saved masks 
-    io::outb(PicPort::MasterData as u16, master_mask);
+    io::outb(PicPort::MasterData as u16, 0xFD); // TODO this "as u16" is ugly, can we find a
+                                                       // better way
     io::outb(PicPort::SlaveData as u16, slave_mask);
 }
 

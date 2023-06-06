@@ -29,8 +29,6 @@ pub fn test_handler()
 {
     unsafe {
         write!(VGA_INSTANCE.as_mut().unwrap(), "test interrupt\n").unwrap();
-        asm!("cli; hlt", options(nostack));
-        loop {}
     }
 }
 
@@ -39,13 +37,33 @@ pub fn exception_handler()
 {
     unsafe {
         write!(VGA_INSTANCE.as_mut().unwrap(), "CPU Exception !!!!!\n").unwrap();
-        loop {}
     }
+}
+
+#[no_mangle]
+pub fn keystroke_handler(data: u32)
+{
+    unsafe {
+        write!(VGA_INSTANCE.as_mut().unwrap(), "Keystroke code : {:x}\n", data).unwrap();
+    }
+}
+
+extern "C" {
+    fn keyboard_interrupt();
 }
 
 pub fn setup_handlers()
 {
-    for i in 0..256 {
+    for i in 0..0x20 {
+        unsafe {
+            IDT[i].offset_low = ((exception_handler as u32) & 0xffff) as u16;
+            IDT[i].selector = (1 as u16) << 3;
+            IDT[i].zero = 0;
+            IDT[i].flags = 0x8e;
+            IDT[i].offset_high = (exception_handler as u32 >> 16) as u16;
+        }
+    }
+    for i in 0x20..256 {
         unsafe {
             IDT[i].offset_low = ((test_handler as u32) & 0xffff) as u16;
             IDT[i].selector = (1 as u16) << 3;
@@ -53,6 +71,13 @@ pub fn setup_handlers()
             IDT[i].flags = 0x8e;
             IDT[i].offset_high = (test_handler as u32 >> 16) as u16;
         }
+    }
+    unsafe {
+        IDT[0x21].offset_low = ((keyboard_interrupt as u32) & 0xffff) as u16;
+        IDT[0x21].selector = (1 as u16) << 3;
+        IDT[0x21].zero = 0;
+        IDT[0x21].flags = 0x8e;
+        IDT[0x21].offset_high = (keyboard_interrupt as u32 >> 16) as u16;
     }
 }
 

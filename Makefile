@@ -30,3 +30,6 @@ clean:
 
 run: $(NAME)
 	$(QEMU) -kernel $(NAME)
+
+debug: $(NAME)
+	$(QEMU) -kernel $(NAME) -s -S -no-reboot -d int,cpu_reset

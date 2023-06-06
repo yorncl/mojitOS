@@ -1,4 +1,3 @@
-use core::arch::asm;
 use crate::VGA_INSTANCE;
 use core::fmt::Write;
 
@@ -80,42 +79,22 @@ pub fn load()
 {
     // setup basic segments
     unsafe {
-        GDT[0] = format_entry(0, 0, 0, 0);
-        GDT[1] = format_entry(0, 0xffffffff, 0x9a, 0xc);
-        GDT[2] = format_entry(0, 0xffffffff, 0x92, 0xc);
-        GDT[3] = format_entry(0, 0xffffffff, 0xfa, 0xc);
-        GDT[4] = format_entry(0, 0xffffffff, 0xf2, 0xc);
-        // GDT[5] = format_entry(0, 0xffffffff, 0x89, 0x0);// TODO tss entry
-        GDTR.size = ((GDT.len() * core::mem::size_of::<GdtEntry>()) - 1) as u16;
-        GDTR.offset = &GDT as *const _ as u32;
-        // write!(VGA_INSTANCE.as_mut().unwrap(), "GDTR size : {:x}, offset : {:x}\n", GDTR.size, GDTR.offset);
-        // print gdt address
-        write!(VGA_INSTANCE.as_mut().unwrap(), "GDT address : {:x}\n", &GDT as *const _ as u32).unwrap();
-
-
-        asm!("
-              lgdt [{}]
-             ",
-             in(reg) &GDTR,
-            options(nostack, preserves_flags)
-        );
-        // asm!("pushl $0x8; 
-        //       pushl $1f; 
-        //       lretl; 
-        //       1:", options(att_syntax));
-        // asm!("
-        //       mov ax, 0x10
-        //       mov ds, ax
-        //       mov es, ax
-        //       mov fs, ax
-        //       mov gs, ax
-        //       mov ss, ax
-        //       ", options(nostack, preserves_flags));
+        // GDT[0] = format_entry(0, 0, 0, 0);
+        // GDT[1] = format_entry(0, 0xffffffff, 0x9a, 0xc);
+        // GDT[2] = format_entry(0, 0xffffffff, 0x92, 0xc);
+        // GDT[3] = format_entry(0, 0xffffffff, 0xfa, 0xc);
+        // GDT[4] = format_entry(0, 0xffffffff, 0xf2, 0xc);
+        // // GDT[5] = format_entry(0, 0xffffffff, 0x89, 0x0);// TODO tss entry
+        // GDTR.size = ((GDT.len() * core::mem::size_of::<GdtEntry>()) - 1) as u16;
+        // GDTR.offset = &GDT as *const _ as u32;
+        // // write!(VGA_INSTANCE.as_mut().unwrap(), "GDTR size : {:x}, offset : {:x}\n", GDTR.size, GDTR.offset);
+        // // print gdt address
+        // write!(VGA_INSTANCE.as_mut().unwrap(), "GDT address : {:x}\n", &GDT as *const _ as u32).unwrap();
         load_gdt(&GDTR);
     }
-    unsafe {
-        write!(VGA_INSTANCE.as_mut().unwrap(), "GDT poitner : {:x}\n", &GDT as *const _ as u32).unwrap();
-    }
+    // unsafe {
+    //     write!(VGA_INSTANCE.as_mut().unwrap(), "GDT poitner : {:x}\n", &GDT as *const _ as u32).unwrap();
+    // }
     
 }
 
