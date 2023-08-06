@@ -24,11 +24,26 @@ struct IDTDESC {
 
 static mut IDTR : IDTDESC = IDTDESC { size: 0, offset: 0 };
 
-#[no_mangle]
-pub fn test_handler()
+#[inline(always)]
+fn ack_irq()
 {
     unsafe {
-        write!(VGA_INSTANCE.as_mut().unwrap(), "test interrupt\n").unwrap();
+        // check for slave
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn generic_handler(interrupt_code: u32)
+{
+    unsafe {
+        // write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupt code : {:x}\n", interrupt_code).unwrap();
+        write!(VGA_INSTANCE.as_mut().unwrap(), "Fucking let's goooo\n").unwrap();
+        // ack_irq();
+        // asm!("push eax",
+        //      "mov al, 0x20",
+        //      "out 0x20, al",
+        //      "pop eax",
+        //      options(nostack, preserves_flags));
     }
 }
 
@@ -49,7 +64,7 @@ pub fn keystroke_handler(data: u32)
 }
 
 extern "C" {
-    fn keyboard_interrupt();
+    fn interrupt_wrapper();
 }
 
 pub fn setup_handlers()
@@ -65,19 +80,12 @@ pub fn setup_handlers()
     }
     for i in 0x20..256 {
         unsafe {
-            IDT[i].offset_low = ((test_handler as u32) & 0xffff) as u16;
+            IDT[i].offset_low = ((interrupt_wrapper as u32) & 0xffff) as u16;
             IDT[i].selector = (1 as u16) << 3;
             IDT[i].zero = 0;
             IDT[i].flags = 0x8e;
-            IDT[i].offset_high = (test_handler as u32 >> 16) as u16;
+            IDT[i].offset_high = (interrupt_wrapper as u32 >> 16) as u16;
         }
-    }
-    unsafe {
-        IDT[0x21].offset_low = ((keyboard_interrupt as u32) & 0xffff) as u16;
-        IDT[0x21].selector = (1 as u16) << 3;
-        IDT[0x21].zero = 0;
-        IDT[0x21].flags = 0x8e;
-        IDT[0x21].offset_high = (keyboard_interrupt as u32 >> 16) as u16;
     }
 }
 

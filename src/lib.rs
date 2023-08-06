@@ -75,8 +75,6 @@ fn get_flags() -> u32 {
 fn kloop() -> !
 {
     loop {
-        unsafe {
-        }
     }
 }
 

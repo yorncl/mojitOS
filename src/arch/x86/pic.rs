@@ -35,6 +35,12 @@ enum ICW4 {
     SFNM = 0x10,        // Special fully nested (not)
 }
 
+
+// fn ack_irq()
+// {
+//     asm!();
+// }
+
 fn pic_remap(offset1: i8, offset2: i8)
 {
     // save masks
