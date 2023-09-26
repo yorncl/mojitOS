@@ -59,17 +59,17 @@ pub fn get_cpu_mode() -> &'static str {
     }
 }
 
-#[inline(always)]
-fn get_flags() -> u32 {
-    let flags: u32;
-    unsafe {
-        write!(VGA_INSTANCE.as_mut().unwrap(), "BEFORE\n").unwrap(); // TODO log macro
-        asm!("pushf"," pop {}",out(reg) flags, options(nostack, preserves_flags)); // TODO this
-                                                                                   // crashes
-        write!(VGA_INSTANCE.as_mut().unwrap(), "AFTER\n").unwrap(); // TODO log macro
-    }
-    flags
-}
+// #[inline(always)]
+// fn get_flags() -> u32 {
+//     let flags: u32;
+//     unsafe {
+//         write!(VGA_INSTANCE.as_mut().unwrap(), "BEFORE\n").unwrap(); // TODO log macro
+//         asm!("pushf"," pop {}",out(reg) flags, options(nostack, preserves_flags)); // TODO this
+//                                                                                    // crashes
+//         write!(VGA_INSTANCE.as_mut().unwrap(), "AFTER\n").unwrap(); // TODO log macro
+//     }
+//     flags
+// }
 
 #[no_mangle]
 fn kloop() -> !

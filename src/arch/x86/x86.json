@@ -10,11 +10,6 @@
   "executables": true,
   "linker-flavor": "ld.lld",
   "linker": "rust-lld",
-  "pre-link-args": {
-      "ld.lld": [
-          "--script=linker/x86.ld"
-      ]
-  },
   "panic-strategy": "abort",
   "disable-redzone": true,
   "features": "+soft-float,+sse"

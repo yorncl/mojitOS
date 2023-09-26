@@ -1,7 +1,5 @@
-use crate::VGA_INSTANCE;
-use core::fmt::Write;
-
-
+// use crate::VGA_INSTANCE;
+// use core::fmt::Write;
 
 #[repr(C)]
 #[repr(packed)]
