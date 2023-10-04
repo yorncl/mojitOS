@@ -15,6 +15,7 @@ panic = "abort"
 
 [lib]
 crate-type = ["staticlib"]
+path = "src/kmain.rs"
 
 [features]
 inline-asm = []
