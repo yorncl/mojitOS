@@ -1,11 +1,13 @@
 
 // A simple vga text driver
 use crate::klib::mem;
+use core::fmt;
 use core::fmt::Write;
 use core::ffi::c_void;
 
 const HEIGHT: usize = 25;
 const WIDTH: usize = 80;
+pub static mut VGA_INSTANCE: Option<VGA> = None;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
@@ -26,6 +28,22 @@ pub struct VGA {
     x: usize,
     y: usize,
 }
+
+pub fn io_init()
+{
+    unsafe {
+        VGA_INSTANCE = Some(VGA::new());
+        VGA_INSTANCE.as_mut().unwrap().clear();
+    }
+}
+
+#[doc(hidden)]
+pub fn _print(args: fmt::Arguments) {
+    unsafe {
+        VGA_INSTANCE.as_mut().unwrap().write_fmt(args).unwrap();
+    }
+}
+
 impl VGA {
     pub fn new() -> VGA {
         VGA {

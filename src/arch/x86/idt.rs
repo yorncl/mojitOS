@@ -1,6 +1,5 @@
-use crate::VGA_INSTANCE;
-use core::fmt::Write;
 use core::arch::asm;
+use crate::klog;
 
 #[repr(C)]
 #[repr(packed)]
@@ -37,7 +36,7 @@ pub extern "C" fn generic_handler(interrupt_code: u32)
 {
     unsafe {
         // write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupt code : {:x}\n", interrupt_code).unwrap();
-        write!(VGA_INSTANCE.as_mut().unwrap(), "Fucking let's goooo\n").unwrap();
+        klog!("Fucking let's goooo");
         // ack_irq();
         // asm!("push eax",
         //      "mov al, 0x20",
@@ -50,17 +49,13 @@ pub extern "C" fn generic_handler(interrupt_code: u32)
 #[no_mangle]
 pub fn exception_handler()
 {
-    unsafe {
-        write!(VGA_INSTANCE.as_mut().unwrap(), "CPU Exception !!!!!\n").unwrap();
-    }
+    klog!("CPU Exception !!!!!");
 }
 
 #[no_mangle]
 pub fn keystroke_handler(data: u32)
 {
-    unsafe {
-        write!(VGA_INSTANCE.as_mut().unwrap(), "Keystroke code : {:x}\n", data).unwrap();
-    }
+    klog!("Keystroke code : {:x}", data);
 }
 
 extern "C" {
@@ -101,7 +96,6 @@ pub fn setup()
             in(reg) &IDTR,
             options(nostack, preserves_flags)
         );
-        write!(VGA_INSTANCE.as_mut().unwrap(), "IDT pointer : {:x}, size : {:x}\n", &IDTR as *const _ as u32, IDT.len() * core::mem::size_of::<IdtEntry>() - 1).unwrap();
-        // write!(VGA_INSTANCE.as_mut().unwrap(), "IDT setup done\n");
+        klog!("IDT pointer : {:x}, size : {:x}", &IDTR as *const _ as u32, IDT.len() * core::mem::size_of::<IdtEntry>() - 1);
     }
 }
