@@ -3,7 +3,7 @@ global loader
 global stack_ptr
 global start
 
-extern kmain
+extern kstart
 
 MODULEALIGN equ 1<<0
 MEMINFO equ 1<<1
@@ -27,7 +27,7 @@ start:
 
   push ebx ; multiboot2 info structure pointer
   push eax ; multiboot2 magic number
-  call kmain
+  call kstart
 
   cli
 
