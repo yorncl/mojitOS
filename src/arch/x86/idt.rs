@@ -24,26 +24,20 @@ struct IDTDESC {
 static mut IDTR : IDTDESC = IDTDESC { size: 0, offset: 0 };
 
 #[inline(always)]
-fn ack_irq()
+pub fn ack_irq()
 {
-    unsafe {
-        // check for slave
-    }
 }
 
 #[no_mangle]
 pub extern "C" fn generic_handler(interrupt_code: u32)
 {
-    unsafe {
-        // write!(VGA_INSTANCE.as_mut().unwrap(), "Interrupt code : {:x}\n", interrupt_code).unwrap();
-        klog!("Fucking let's goooo");
+        klog!("Fucking let's goooo {}", interrupt_code);
         // ack_irq();
         // asm!("push eax",
         //      "mov al, 0x20",
         //      "out 0x20, al",
         //      "pop eax",
         //      options(nostack, preserves_flags));
-    }
 }
 
 #[no_mangle]

@@ -4,6 +4,7 @@ use super::idt;
 use super::paging;
 use crate::driver::vga;
 use crate::klog;
+use crate::arch::common::multiboot::*;
 
 use core::arch::asm;
 
@@ -47,14 +48,13 @@ fn kloop() -> !
     }
 }
 
-
 #[no_mangle]
-pub unsafe extern "C" fn kstart(magic: u32, multiboot_info: *const u32) -> !
+pub unsafe extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 {
-    vga::io_init(); // TODO this is primitive logging
-    klog!("{:p}", magic as *const u32);
-    klog!("{:p}", multiboot_info);
+    vga::io_init(); // TODO this is primitive logging, maybe we need to wait for the whole memory
+                    // to setup
     klog!("VGA initialized");
+    parse_mboot_info(mboot);
     unsafe {
         asm!("cli");
         klog!("CPU mode: {}", get_cpu_mode());

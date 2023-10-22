@@ -1,6 +1,7 @@
 use crate::klog;
 
 #[repr(u32)]
+#[allow(dead_code)]
 enum PDEFlag // aligned for 4kb
 {
     Present = 1,
@@ -36,6 +37,7 @@ impl BitSet<PDEFlag> for PDE
 
 
 #[repr(u32)]
+#[allow(dead_code)]
 enum PTEFlag
 {
     Present = 1,
@@ -84,38 +86,34 @@ extern "C"
 
 pub fn setup()
 {
-    let mut PAGE_DIRECTORY = AlignedDirectory([0; 1024]);
-    let mut PAGE_TABLE = AlignedPageTable([0; 1024]);
-    unsafe {
-        for entry in PAGE_DIRECTORY.0.iter_mut()
-        {
-                entry.set(PDEFlag::Write);
-        }
-        for (i, entry) in PAGE_TABLE.0.iter_mut().enumerate()
-        {
-                *entry = (i * 0x1000) as u32;
-                entry.set(PTEFlag::Present);
-                entry.set(PTEFlag::Write);
-                entry.set(PTEFlag::User);
-                // klog!("Page Table Entry : {:b}", entry);
-        }
+    let mut page_directory = AlignedDirectory([0; 1024]);
+    let mut page_table = AlignedPageTable([0; 1024]);
+    for entry in page_directory.0.iter_mut()
+    {
+            entry.set(PDEFlag::Write);
+    }
+    for (i, entry) in page_table.0.iter_mut().enumerate()
+    {
+            *entry = (i * 0x1000) as u32;
+            entry.set(PTEFlag::Present);
+            entry.set(PTEFlag::Write);
+            entry.set(PTEFlag::User);
+            // klog!("Page Table Entry : {:b}", entry);
     }
     unsafe {
-        PAGE_DIRECTORY.0[0] = (&PAGE_TABLE.0 as *const u32) as u32 & 0xfffff000;
-        PAGE_DIRECTORY.0[0].set(PDEFlag::Present);
-        PAGE_DIRECTORY.0[0].set(PDEFlag::Write);
-        PAGE_DIRECTORY.0[0].set(PDEFlag::User);
+        page_directory.0[0] = (&page_table.0 as *const u32) as u32 & 0xfffff000;
+        page_directory.0[0].set(PDEFlag::Present);
+        page_directory.0[0].set(PDEFlag::Write);
+        page_directory.0[0].set(PDEFlag::User);
         // print binary first PDE
-        klog!("Page Directory Entry : {:p}", &PAGE_DIRECTORY);
-        klog!("Page Table : {:p}", &PAGE_TABLE);
-        klog!("Page directory first entry : {:b}", PAGE_DIRECTORY.0[0]);
-        load_page_directory(&PAGE_DIRECTORY.0 as *const u32);
+        klog!("Page Directory Entry : {:p}", &page_directory);
+        klog!("Page Table : {:p}", &page_table);
+        klog!("Page directory first entry : {:b}", page_directory.0[0]);
+        load_page_directory(&page_directory.0 as *const u32);
         enable_paging();
 
         loop{}
     }
-    unsafe {
-        klog!("Page Directory Entry : {}", PAGE_DIRECTORY.0[0]);
-    }
+    klog!("Page Directory Entry : {}", page_directory.0[0]);
 }
 
