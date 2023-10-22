@@ -50,6 +50,7 @@ pub extern "C" fn generic_handler(interrupt_code: u32)
 pub fn exception_handler()
 {
     klog!("CPU Exception !!!!!");
+    loop{}
 }
 
 #[no_mangle]

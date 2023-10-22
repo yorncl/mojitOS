@@ -10,6 +10,7 @@ mod klib;
 use arch::x86::gdt;
 use arch::x86::pic;
 use arch::x86::idt;
+use arch::x86::paging;
 use driver::vga;
 
 use core::arch::asm;
@@ -21,11 +22,9 @@ use core::arch::asm;
 /// This function is called on panic.
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    unsafe {
-        klog!("Ceci est une panique \n"); // TODO log macro
-        // print panic 
-        klog!("{}\n", _info); // TODO log macro
-    }
+    klog!("Ceci est une panique \n"); // TODO log macro
+    // print panic 
+    klog!("{}\n", _info); // TODO log macro
     loop {}
 }
 
@@ -73,9 +72,11 @@ fn kloop() -> !
 
 #[no_mangle]
 #[allow(unused_results)] // TODO remove and handle correctly
-fn kmain() -> !
+fn kmain(magic: u32, multiboot_info: *const u32) -> !
 {
     vga::io_init(); // TODO this is primitive logging
+    klog!("{:p}", magic as *const u32);
+    klog!("{:p}", multiboot_info);
     klog!("VGA initialized");
     unsafe {
         asm!("cli");
@@ -87,11 +88,12 @@ fn kmain() -> !
         idt::setup();
         klog!("IDT setup");
         asm!("sti");
+        paging::setup();
     }
     kloop();
 }
 
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
-    kmain();
-}
+// #[no_mangle]
+// pub extern "C" fn _start() -> ! {
+//     kmain();
+// }

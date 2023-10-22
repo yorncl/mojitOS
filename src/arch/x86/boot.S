@@ -24,9 +24,9 @@ STACKSIZE equ 0x4000
 
 start:
   mov esp, stack+STACKSIZE
-  push eax
-  push ebx ; multiboot2 spec says ebx contains the address of the multiboot header
 
+  push ebx ; multiboot2 info structure pointer
+  push eax ; multiboot2 magic number
   call kmain
 
   cli
