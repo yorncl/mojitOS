@@ -54,7 +54,9 @@ pub unsafe extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     vga::io_init(); // TODO this is primitive logging, maybe we need to wait for the whole memory
                     // to setup
     klog!("VGA initialized");
+    klog!("Multiboot: magic({:x}) mboot({:p})", magic, mboot);
     parse_mboot_info(mboot);
+    loop{}
     unsafe {
         asm!("cli");
         klog!("CPU mode: {}", get_cpu_mode());

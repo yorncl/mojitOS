@@ -25,8 +25,8 @@ STACKSIZE equ 0x4000
 start:
   mov esp, stack+STACKSIZE
 
-  push ebx ; multiboot2 info structure pointer
-  push eax ; multiboot2 magic number
+  push ebx ; multiboot info structure pointer
+  push eax ; multiboot magic number
   call kstart
 
   cli

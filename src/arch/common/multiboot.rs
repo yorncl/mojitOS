@@ -293,6 +293,21 @@ pub unsafe fn parse_mboot_info(ptr: *const u32)
         klog!("Memory lower: {} KB", info.mem_lower);
         klog!("Memory upper: {} KB", info.mem_upper);
     }
+
+    // elf or aout
+    if info.flags & MULTIBOOT_INFO_AOUT_SYMS != 0 && info.flags & MULTIBOOT_INFO_ELF_SHDR != 0 {
+      panic!("This is not possible ! Those two flags are mutually exclusive");
+    }
+    if info.flags & MULTIBOOT_INFO_AOUT_SYMS != 0 {
+      klog!("This is an AOUT format");
+    }
+    if info.flags & MULTIBOOT_INFO_ELF_SHDR != 0 {
+      klog!("This is an ELF format");
+      // print elf section header info
+      klog!("Elf section header : num({}) size({}) addr({:p}) shndx({})",
+            {info.u.elf.num}, {info.u.elf.size}, {info.u.elf.addr as *const u32}, {info.u.elf.shndx});
+    }
+
     if info.flags & MULTIBOOT_INFO_MEM_MAP != 0 {
         let nentries = info.mmap_length / core::mem::size_of::<MultibootMmapEntry>() as u32;
         klog!("Memory map has {} entries", nentries);

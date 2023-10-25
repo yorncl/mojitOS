@@ -4,6 +4,7 @@ QEMU=qemu-system-i386
 CARGO=cargo
 
 NAME=mojitos.elf
+ISO=mojitos.iso
 AS=nasm
 ASFLAGS=-f elf32
 
@@ -16,6 +17,10 @@ ASM_OBJECTS=$(patsubst src/%.S, target/obj/%.o, $(ASM_SOURCES))
 all: $(NAME)
 
 $(NAME): $(KLIB) asm link
+
+$(ISO): $(NAME)
+	cp mojitos.elf iso/boot/mojitos.elf
+	grub-mkrescue -o $(ISO) iso
 
 $(KLIB):
 	$(CARGO) build  # TODO debug ?
@@ -36,7 +41,10 @@ clean:
 	rm -f $(NAME)
 	rm -f $(ASM_OBJECTS)
 
-run: $(NAME)
+run: $(ISO)
+	$(QEMU) -cdrom $(ISO)
+
+run_non_iso: $(NAME) # TODO I think there is a bug in qemu for multiboot
 	$(QEMU) -kernel $(NAME)
 
 debug: $(NAME)
