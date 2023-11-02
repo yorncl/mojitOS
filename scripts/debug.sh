@@ -1,3 +1,3 @@
-gdb -x scripts/debug.gdb kfs.elf
+gdb -x scripts/debug.gdb mojitos.elf
 
 

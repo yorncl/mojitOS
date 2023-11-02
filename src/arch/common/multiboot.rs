@@ -315,8 +315,8 @@ pub unsafe fn parse_mboot_info(ptr: *const u32)
         for _i in 0..nentries
         {
             let entry = ptr.read_unaligned();
-            klog!("Mmap entry : size({}) addr({:p}) len({}) type({})",
-                  {entry.size}, {entry.addr as *const u32}, {entry.len}, {entry.type_});
+            klog!("Mmap entry : size({}) addr({:p}) len({} KB) type({})",
+                  {entry.size}, {entry.addr as *const u32}, {entry.len/1024}, {entry.type_});
             ptr = ptr.offset(1);
         }
         klog!("Address of frame buffer : {:p}", info.framebuffer_addr as *const u32);
