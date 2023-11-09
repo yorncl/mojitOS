@@ -89,13 +89,13 @@ pub fn format_entry(base: u32, limit : u32, access_byte: u8, flags: u8) -> GdtEn
     entry.access = access_byte;
 
     // print raw struct in hex
-unsafe {
-    klog!("New entry");
-    let pointer = &entry as *const _ as *const u8;
-        for i in 0..8 {
-            klog!("{:08b} ", *pointer.offset(i as isize));
-        }
-    }
+// unsafe {
+//     klog!("New entry");
+//     let pointer = &entry as *const _ as *const u8;
+//         for i in 0..8 {
+//             klog!("{:08b} ", *pointer.offset(i as isize));
+//         }
+//     }
     entry
 }
 

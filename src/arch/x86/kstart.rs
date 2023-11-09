@@ -66,7 +66,7 @@ pub unsafe extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
         idt::setup();
         klog!("IDT setup");
         asm!("sti");
-        // paging::setup();
+        paging::setup_early();
     }
     crate::kmain();    
 }

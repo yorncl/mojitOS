@@ -18,7 +18,7 @@ all: $(NAME)
 
 $(NAME): $(KLIB) asm link
 
-$(ISO): $(NAME)
+iso: $(NAME)
 	cp mojitos.elf iso/boot/mojitos.elf
 	grub-mkrescue -o $(ISO) iso
 
@@ -41,7 +41,7 @@ clean:
 	rm -f $(NAME)
 	rm -f $(ASM_OBJECTS)
 
-run: $(ISO)
+run: iso # TODO for some reason using the $(ISO) rule as dependency requires to run this twice for the iso to be rebuilt
 	$(QEMU) -cdrom $(ISO)
 
 run_non_iso: $(NAME) # TODO I think there is a bug in qemu for multiboot

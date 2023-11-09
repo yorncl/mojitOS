@@ -1,4 +1,5 @@
-use crate::klog;
+use crate::{klog, print};
+use core::arch::asm;
 
 #[repr(u32)]
 #[allow(dead_code)]
@@ -83,8 +84,11 @@ extern "C"
     fn enable_paging();
 }
 
+pub fn address_translate()
+{
+}
 
-pub fn setup()
+pub fn setup_early()
 {
     let mut page_directory = AlignedDirectory([0; 1024]);
     let mut page_table = AlignedPageTable([0; 1024]);
@@ -111,9 +115,41 @@ pub fn setup()
         klog!("Page directory first entry : {:b}", page_directory.0[0]);
         load_page_directory(&page_directory.0 as *const u32);
         enable_paging();
-
-        loop{}
     }
     klog!("Page Directory Entry : {}", page_directory.0[0]);
+    let ptr = 0xdeadbeaf as *mut u8;
+    unsafe { *ptr = 42; }
+}
+
+mod PF
+{
+    pub const P : u32 = 1 << 0;
+    pub const W : u32 = 1 << 1;
+    pub const U : u32 = 1 << 2;
+    pub const R : u32 = 1 << 3;
+    pub const I : u32 = 1 << 4;
+    pub const PK : u32 = 1 << 5;
+    pub const SS : u32 = 1 << 6;
+    pub const SGX : u32 = 1 << 7;
+}
+use PF::*;
+
+pub fn page_fault_handler(instrction_pointer: u32, code: u32)
+{
+    let address : u32;
+    klog!("PAGE FAULT EXCEPTION");
+    unsafe {asm!("mov {0}, cr2", out(reg) address);}
+    klog!("Virtual address : {:p}", (address as *const u32));
+    print!("Error code: "); // TODO reformat in the future
+    print!("{} ", if code & PF::P != 0 {"PAGE_PROTECTION"} else {"PAGE_NOT_PRESENT"});
+    print!("{} ", if code & PF::W != 0 {"WRITE"} else {"READ"});
+    if code & PF::U != 0 { print!("CPL_3 ") };
+    if code & PF::R != 0 { print!("RESERVED_WRITE_BITS ") };
+    if code & PF::I != 0 { print!("INSTRUCTION_FETCH ") };
+    if code & PF::PK != 0 { print!("KEY_PROTECTION ") };
+    if code & PF::SS != 0 { print!("SHADOW STACK ") };
+    if code & PF::SGX != 0 { print!("SGX_VIOLATION ") };
+    print!("\n");
+    loop{}
 }
 

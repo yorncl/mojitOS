@@ -1,5 +1,6 @@
 use core::arch::asm;
-use crate::klog;
+use crate::{klog, print};
+use super::paging::page_fault_handler;
 
 #[repr(C)]
 #[repr(packed)]
@@ -41,7 +42,7 @@ pub extern "C" fn generic_handler(interrupt_code: u32)
 }
 
 #[no_mangle]
-pub fn exception_handler()
+pub fn exception_handler(code:u32)
 {
     klog!("CPU Exception !!!!!");
     loop{}
@@ -54,28 +55,40 @@ pub fn keystroke_handler(data: u32)
 }
 
 extern "C" {
-    fn interrupt_wrapper();
+    fn interrupt_wrapper(data: u32);
 }
 
-pub fn setup_handlers()
+fn set_exception(i: usize, handler: u32, selector: u16, flags: u8)
+{
+    unsafe {
+        IDT[i].offset_low = ((handler as u32) & 0xffff) as u16;
+        IDT[i].selector = selector;
+        IDT[i].zero = 0;
+        IDT[i].flags = flags;
+        IDT[i].offset_high = (exception_handler as u32 >> 16) as u16;
+    }
+}
+
+// TODO hangler type is ugly
+fn set_interrupt(i: usize, handler: unsafe extern fn (u32) -> (), selector: u16, flags: u8)
+{
+    unsafe {
+        IDT[i].offset_low = ((handler as u32) & 0xffff) as u16;
+        IDT[i].selector = selector;
+        IDT[i].zero = 0;
+        IDT[i].flags = flags;
+        IDT[i].offset_high = (exception_handler as u32 >> 16) as u16;
+    }
+}
+
+fn setup_handlers()
 {
     for i in 0..0x20 {
-        unsafe {
-            IDT[i].offset_low = ((exception_handler as u32) & 0xffff) as u16;
-            IDT[i].selector = (1 as u16) << 3;
-            IDT[i].zero = 0;
-            IDT[i].flags = 0x8e;
-            IDT[i].offset_high = (exception_handler as u32 >> 16) as u16;
-        }
+        set_exception(i, exception_handler as u32, 1 << 3, 0x8e);
     }
+    set_exception(0xe, page_fault_handler as u32, 1 << 3, 0x8e);
     for i in 0x20..256 {
-        unsafe {
-            IDT[i].offset_low = ((interrupt_wrapper as u32) & 0xffff) as u16;
-            IDT[i].selector = (1 as u16) << 3;
-            IDT[i].zero = 0;
-            IDT[i].flags = 0x8e;
-            IDT[i].offset_high = (interrupt_wrapper as u32 >> 16) as u16;
-        }
+        set_interrupt(i, interrupt_wrapper, 1 << 3, 0x8e);
     }
 }
 
