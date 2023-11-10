@@ -1,80 +1,70 @@
 use crate::{klog, print};
-use core::arch::asm;
+use core::{arch::asm, ops::BitAnd};
+use bitflags::bitflags;
 
-#[repr(u32)]
-#[allow(dead_code)]
-enum PDEFlag // aligned for 4kb
-{
-    Present = 1,
-    Write = 1 << 1,
-    User = 1 << 2,
-    WriteThrough = 1 << 3,
-    CacheDisable = 1 << 4,
-    Accessed = 1 << 5,
-    Available = 1 << 6,
-    PageSize = 1 << 7,
+bitflags! {
+    #[derive(Copy, Clone)]
+    pub struct PDEF : u32 {
+        const Present = 1;
+        const Write = 1 << 1;
+        const User = 1 << 2;
+        const WriteThrough = 1 << 3;
+        const CacheDisable = 1 << 4;
+        const Accessed = 1 << 5;
+        const Available = 1 << 6;
+        const PageSize = 1 << 7;
+        const _ = !0;
+    }
+}
+
+bitflags! {
+    #[derive(Copy, Clone)]
+    pub struct PTEF : u32 {
+        const Present = 1;
+        const Write = 1 << 1;
+        const User = 1 << 2;
+        const WriteThrough = 1 << 3;
+        const CacheDisable = 1 << 4;
+        const Accessed = 1 << 5;
+        const Dirty = 1 << 6;
+        const PageAttribute = 1 << 7;
+        const Global = 1 << 8;
+        const _ = !0;
+    }
 }
 
 type PDE = u32;
-
-trait BitSet<T>
-{
-    fn set(&mut self, flag: T);
-    fn unset(&mut self, flag: T);
-}
-
-impl BitSet<PDEFlag> for PDE
-{
-    fn set(&mut self, flag: PDEFlag)
-    {
-        *self |= flag as u32;
-    }
-
-    fn unset(&mut self, flag: PDEFlag)
-    {
-        *self &= !(flag as u32);
-    }
-}
-
-
-#[repr(u32)]
-#[allow(dead_code)]
-enum PTEFlag
-{
-    Present = 1,
-    Write = 1 << 1,
-    User = 1 << 2,
-    WriteThrough = 1 << 3,
-    CacheDisable = 1 << 4,
-    Accessed = 1 << 5,
-    Dirty = 1 << 6,
-    PageAttribute = 1 << 7,
-    Global = 1 << 8
-}
-
 type PTE = u32;
 
-impl BitSet<PTEFlag> for PTE
-{
-    fn set(&mut self, flag: PTEFlag)
+trait BitFlags<T, U> {
+    fn set_flags(&mut self, flags : U);
+    fn unset_flags(&mut self, flags : U);
+}
+impl BitFlags<u32, PDEF> for PDE {
+    fn set_flags(&mut self, flags : PDEF)
     {
-        *self |= flag as u32;
+        *self |= flags.bits();
     }
-
-    fn unset(&mut self, flag: PTEFlag)
+    fn unset_flags(&mut self, flags : PDEF)
     {
-        *self &= !(flag as u32);
+        *self &= !flags.bits();
+    }
+}
+impl BitFlags<u32, PTEF> for PDE {
+    fn set_flags(&mut self, flags : PTEF)
+    {
+        *self |= flags.bits();
+    }
+    fn unset_flags(&mut self, flags : PTEF)
+    {
+        *self &= !flags.bits();
     }
 }
 
 #[repr(align(4096))]
 struct AlignedDirectory([PDE; 1024]);
 #[repr(align(4096))]
-struct AlignedPageTable([PDE; 1024]);
-
-// fn enable_paging()
-// {
-// }
+struct AlignedPageTable([PTE; 1024]);
 
 extern "C"
 {
@@ -94,21 +84,18 @@ pub fn setup_early()
     let mut page_table = AlignedPageTable([0; 1024]);
     for entry in page_directory.0.iter_mut()
     {
-            entry.set(PDEFlag::Write);
+            entry.set_flags(PDEF::Write);
     }
     for (i, entry) in page_table.0.iter_mut().enumerate()
     {
             *entry = (i * 0x1000) as u32;
-            entry.set(PTEFlag::Present);
-            entry.set(PTEFlag::Write);
-            entry.set(PTEFlag::User);
-            // klog!("Page Table Entry : {:b}", entry);
+            entry.set_flags(PTEF::Present | PTEF::Write | PTEF:: User);
     }
     unsafe {
         page_directory.0[0] = (&page_table.0 as *const u32) as u32 & 0xfffff000;
-        page_directory.0[0].set(PDEFlag::Present);
-        page_directory.0[0].set(PDEFlag::Write);
-        page_directory.0[0].set(PDEFlag::User);
+        klog!("Page directory first entry : {:b}", page_directory.0[0]);
+        page_directory.0[0].set_flags(PDEF::Present | PDEF::Write | PDEF::User);
+        klog!("Page directory first entry : {:b}", page_directory.0[0]);
         // print binary first PDE
         klog!("Page Directory Entry : {:p}", &page_directory);
         klog!("Page Table : {:p}", &page_table);
@@ -121,18 +108,21 @@ pub fn setup_early()
     unsafe { *ptr = 42; }
 }
 
-mod PF
-{
-    pub const P : u32 = 1 << 0;
-    pub const W : u32 = 1 << 1;
-    pub const U : u32 = 1 << 2;
-    pub const R : u32 = 1 << 3;
-    pub const I : u32 = 1 << 4;
-    pub const PK : u32 = 1 << 5;
-    pub const SS : u32 = 1 << 6;
-    pub const SGX : u32 = 1 << 7;
+bitflags! {
+    #[derive(Copy, Clone)]
+    pub struct PF : u32
+    {
+        const P = 1 << 0;
+        const W = 1 << 1;
+        const U = 1 << 2;
+        const R = 1 << 3;
+        const I = 1 << 4;
+        const PK = 1 << 5;
+        const SS = 1 << 6;
+        const SGX = 1 << 7;
+        const _ = !0;
+    }
 }
-use PF::*;
 
 pub fn page_fault_handler(instrction_pointer: u32, code: u32)
 {
@@ -141,14 +131,15 @@ pub fn page_fault_handler(instrction_pointer: u32, code: u32)
     unsafe {asm!("mov {0}, cr2", out(reg) address);}
     klog!("Virtual address : {:p}", (address as *const u32));
     print!("Error code: "); // TODO reformat in the future
-    print!("{} ", if code & PF::P != 0 {"PAGE_PROTECTION"} else {"PAGE_NOT_PRESENT"});
-    print!("{} ", if code & PF::W != 0 {"WRITE"} else {"READ"});
-    if code & PF::U != 0 { print!("CPL_3 ") };
-    if code & PF::R != 0 { print!("RESERVED_WRITE_BITS ") };
-    if code & PF::I != 0 { print!("INSTRUCTION_FETCH ") };
-    if code & PF::PK != 0 { print!("KEY_PROTECTION ") };
-    if code & PF::SS != 0 { print!("SHADOW STACK ") };
-    if code & PF::SGX != 0 { print!("SGX_VIOLATION ") };
+    let flags = PF::from_bits(code).unwrap();
+    print!("{} ", if flags.contains(PF::P) {"PAGE_PROTECTION"} else {"PAGE_NOT_PRESENT"});
+    print!("{} ", if flags.contains(PF::W) {"WRITE"} else {"READ"});
+    if flags.contains(PF::U) { print!("CPL_3 ") };
+    if flags.contains(PF::R) { print!("RESERVED_WRITE_BITS ") };
+    if flags.contains(PF::I) { print!("INSTRUCTION_FETCH ") };
+    if flags.contains(PF::PK) { print!("KEY_PROTECTION ") };
+    if flags.contains(PF::SS) { print!("SHADOW STACK ") };
+    if flags.contains(PF::SGX) { print!("SGX_VIOLATION ") };
     print!("\n");
     loop{}
 }
