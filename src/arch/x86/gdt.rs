@@ -2,6 +2,8 @@
 // use core::fmt::Write;
 use crate::klog;
 
+
+// TODO refacor using bitflags ?
 #[allow(dead_code)]
 pub mod AF // aligned for 4kb
 {
@@ -25,6 +27,7 @@ pub mod F
 }
 
 #[repr(C,packed)]
+#[derive(Default, Clone, Copy)]
 pub struct GdtEntry {
     limit_low: u16,
     base_low: u16,
@@ -34,38 +37,7 @@ pub struct GdtEntry {
     base_high: u8,
 }
 
-impl Default for GdtEntry {
-    fn default() -> Self {
-        GdtEntry {
-            limit_low: 0,
-            base_low: 0,
-            base_mid: 0,
-            access: 0,
-            flags_limit_high: 0,
-            base_high: 0,
-        }
-    }
-}
-
-impl Clone for GdtEntry 
-{
-    fn clone(&self) -> Self {
-        GdtEntry {
-            limit_low: self.limit_low,
-            base_low: self.base_low,
-            base_mid: self.base_mid,
-            access: self.access,
-            flags_limit_high: self.flags_limit_high,
-            base_high: self.base_high,
-        }
-    }
-}
-
-
-impl Copy for GdtEntry {}
-
 const NENTRIES : usize = 5;
-
 
 static mut GDT : [GdtEntry; NENTRIES] = [
     GdtEntry { limit_low: 0, base_low: 0, base_mid: 0, access: 0, flags_limit_high: 0, base_high: 0, }; NENTRIES];

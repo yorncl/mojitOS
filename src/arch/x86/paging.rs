@@ -1,5 +1,5 @@
 use crate::{klog, print};
-use core::{arch::asm, ops::BitAnd};
+use core::arch::asm;
 use bitflags::bitflags;
 
 bitflags! {
