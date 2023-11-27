@@ -68,9 +68,7 @@ struct AlignedPageTable([PTE; 1024]);
 
 extern "C"
 {
-    #[no_mangle]
     fn load_page_directory(page_directory: *const PDE);
-    #[no_mangle]
     fn enable_paging();
 }
 
@@ -124,7 +122,7 @@ bitflags! {
     }
 }
 
-pub fn page_fault_handler(instrction_pointer: u32, code: u32)
+pub fn page_fault_handler(instruction_pointer: u32, code: u32)
 {
     let address : u32;
     klog!("PAGE FAULT EXCEPTION");

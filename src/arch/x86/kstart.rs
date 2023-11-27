@@ -3,6 +3,8 @@ use super::pic;
 use super::idt;
 use super::paging;
 use crate::driver::vga;
+use crate::arch::common::pmm;
+use super::vmm;
 use crate::klog;
 use crate::arch::common::multiboot::*;
 
@@ -29,25 +31,6 @@ pub fn get_cpu_mode() -> &'static str {
     }
 }
 
-// #[inline(always)]
-// fn get_flags() -> u32 {
-//     let flags: u32;
-//     unsafe {
-//         write!(VGA_INSTANCE.as_mut().unwrap(), "BEFORE\n").unwrap(); // TODO log macro
-//         asm!("pushf"," pop {}",out(reg) flags, options(nostack, preserves_flags)); // TODO this
-//                                                                                    // crashes
-//         write!(VGA_INSTANCE.as_mut().unwrap(), "AFTER\n").unwrap(); // TODO log macro
-//     }
-//     flags
-// }
-
-#[no_mangle]
-fn kloop() -> !
-{
-    loop {
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 {
@@ -66,6 +49,9 @@ pub unsafe extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
         idt::setup();
         klog!("IDT setup");
         asm!("sti");
+        pmm::init();
+        vmm::init();
+        loop{}
         paging::setup_early();
     }
     crate::kmain();    
