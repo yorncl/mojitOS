@@ -14,6 +14,8 @@ OBJDIR=target/obj # TODO not very clean
 ASM_SOURCES=$(shell find src/ -type f -name '*.S')
 ASM_OBJECTS=$(patsubst src/%.S, target/obj/%.o, $(ASM_SOURCES))
 
+LINK_SCRIPT=linker/x86.ld
+
 all: $(NAME)
 
 $(NAME): $(KLIB) asm link
@@ -33,8 +35,8 @@ objdir:
 	mkdir -p $(OBJDIR)
 asm : objdir $(ASM_OBJECTS)
 
-link:
-	ld -n -nostdlib -m elf_i386 -T linker/x86.ld -o $(NAME) $(ASM_OBJECTS) target/x86/debug/$(KLIB)
+link:$(LINK_SCRIPT)
+	ld -n -nostdlib -m elf_i386 -T $(LINK_SCRIPT) -o $(NAME) $(ASM_OBJECTS) target/x86/debug/$(KLIB)
 
 clean:
 	$(CARGO) clean
@@ -42,7 +44,7 @@ clean:
 	rm -f $(ASM_OBJECTS)
 
 run: iso # TODO for some reason using the $(ISO) rule as dependency requires to run this twice for the iso to be rebuilt
-	$(QEMU) -cdrom $(ISO)
+	$(QEMU) -cdrom $(ISO) -no-reboot
 
 run_non_iso: $(NAME) # TODO I think there is a bug in qemu for multiboot
 	$(QEMU) -kernel $(NAME)

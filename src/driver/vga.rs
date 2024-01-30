@@ -29,6 +29,7 @@ pub struct VGA {
     y: usize,
 }
 
+#[no_mangle]
 pub fn io_init()
 {
     unsafe {

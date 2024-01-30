@@ -106,6 +106,12 @@ pub fn setup_early()
     unsafe { *ptr = 42; }
 }
 
+// TODO change this function
+pub fn enable()
+{
+    setup_early();
+}
+
 bitflags! {
     #[derive(Copy, Clone)]
     pub struct PF : u32

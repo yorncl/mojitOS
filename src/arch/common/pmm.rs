@@ -1,6 +1,10 @@
 use crate::klog;
+use super::meminfo;
+
+// TODO locking
 
 const PMM_SIZE : usize = 1 << 17; // TODO enough to manage 4GB
+static mut BITMAP_SIZE : usize = 0; // TODO enough to manage 4GB
 static mut PMM : [u8; PMM_SIZE] = [0; PMM_SIZE]; // TODO probably shouldn't be static allocation ?
 
 macro_rules! is_set
@@ -30,11 +34,11 @@ macro_rules! unset_bit
 // get first free page and returns its address
 fn get_first_free() -> Option<usize> // TODO refactor to Result ?
 {
-  for i in 0..PMM_SIZE {
-    unsafe {
-      if !is_set!(i) {
-        return Some(i);
-      }
+  unsafe {
+    for i in 0..BITMAP_SIZE {
+        if !is_set!(i) {
+          return Some(i);
+        }
     }
   }
   None
@@ -57,10 +61,6 @@ fn free_block(i: usize)
 pub fn init()
 {
   unsafe {
-    match get_first_free() 
-    {
-      Some(block) => { alloc_block(block); klog!("Allocating block number {}, PMM[0]={})", block, PMM[0]); },
-      None => klog!("Oh shoot we're out of memory !!!!!")
-    }
+    BITMAP_SIZE = meminfo::get_mem_size() / meminfo::PAGE_SIZE;
   }
 }

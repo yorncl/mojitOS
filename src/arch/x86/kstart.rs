@@ -31,28 +31,49 @@ pub fn get_cpu_mode() -> &'static str {
     }
 }
 
+extern "C" {
+    static kernel_image_start : u32;
+    static kernel_image_end : u32;
+}
+
 #[no_mangle]
-pub unsafe extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
+pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 {
     vga::io_init(); // TODO this is primitive logging, maybe we need to wait for the whole memory
                     // to setup
+    loop{}
     klog!("VGA initialized");
     // klog!("Multiboot: magic({:x}) mboot({:p})", magic, mboot);
-    // parse_mboot_info(mboot);
+    parse_mboot_info(mboot);
     unsafe {
-        asm!("cli");
-        klog!("CPU mode: {}", get_cpu_mode());
-        gdt::load();
-        klog!("GDT loaded");
-        pic::setup(); // TODO error handling in rust 
-        klog!("PIC setup");
-        idt::setup();
-        klog!("IDT setup");
-        asm!("sti");
-        pmm::init();
-        vmm::init();
-        loop{}
-        paging::setup_early();
+        klog!("This is the kernel's start {:p}", &kernel_image_start);
+        klog!("This is the kernel's start {:x}", &kernel_image_start);
+        klog!("This is the kernel's end {:p}", &kernel_image_end);
     }
+    // klog!("This is reload_segments's address {:p}", reload_segments as *const());
+    unsafe { asm!("cli"); }
+    klog!("CPU mode: {}", get_cpu_mode());
+    gdt::load();
+    klog!("GDT loaded");
+    pic::setup(); // TODO error handling in rust 
+    klog!("PIC setup");
+    idt::setup();
+    klog!("IDT setup");
+    unsafe { asm!("sti"); }
+
+
+    // Physical memory manager
+    // Setting up the necessary data structures
+    pmm::init();
+
+    // Setting up the kernel virtual memory
+    // This functions will setup all the necessary structures for page management
+    // It will setup the PMM to reflect the current state of the memory
+    vmm::init();
+
+    // Once everything is ready, enable the paging
+    paging::enable();
+    // Memory management should be setup from there
+
     crate::kmain();    
 }

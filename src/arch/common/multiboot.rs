@@ -279,20 +279,52 @@ struct MultibootApmInfo
 }
 
 
-pub unsafe fn parse_mboot_info(ptr: *const u32)
+use super::meminfo;
+// will store necessary information for the pmm in a structure 
+// we want to identify the biggest block of main memory to use
+// TODO manage more main memory blocks ?
+fn parse_memory_map(info : &MultibootInfo)
 {
+  let mut size : usize = 0;
+  let mut start : usize = 0;
+  let nentries = info.mmap_length / core::mem::size_of::<MultibootMmapEntry>() as u32;
+
+  // klog!("Memory map has {} entries", nentries);
+  let mut ptr = info.mmap_addr as *const MultibootMmapEntry;
+  for _i in 0..nentries
+  {
+      let entry = unsafe {ptr.read_unaligned()};
+      // klog!("Mmap entry : size({}) addr({:p}) len({} KB) type({})",
+      //       {entry.size}, {entry.addr as *const u32}, {entry.len/1024}, {entry.type_});
+      // if the memory is usable
+      if entry.type_ == 1 && entry.len as usize > size {
+        size = entry.len as usize;
+        start = entry.addr as usize;
+      }
+      ptr = unsafe {ptr.offset(1)};
+  }
+  if size <= meminfo::MIN_REQUIRED_MEMORY { // TODO arbitrary choice
+    panic!("No physical memory block bigger than 10 MB");
+  }
+  meminfo::set_mem_info(start, size);
+  // klog!("Main memory : start(0x{:x}), size({})", meminfo::get_mem_start(), meminfo::get_mem_size());
+}
+
+pub fn parse_mboot_info(ptr: *const u32)
+{
+  unsafe {
     let info : &MultibootInfo = &*(ptr as *const MultibootInfo);
-    klog!("Mboot flags euuuh: {:b}", info.flags);
-    klog!("Boot modules : {}", info.mods_count);
+    // klog!("Mboot flags euuuh: {:b}", info.flags);
+    // klog!("Boot modules : {}", info.mods_count);
     // memory info
-    klog!("Memory lower: {} KB", info.mem_lower);
-    klog!("Memory upper: {} KB", info.mem_upper);
+    // klog!("Memory lower: {} KB", info.mem_lower);
+    // klog!("Memory upper: {} KB", info.mem_upper);
 
     // memory map
-    if info.flags & MULTIBOOT_INFO_MEMORY != 0 {
-        klog!("Memory lower: {} KB", info.mem_lower);
-        klog!("Memory upper: {} KB", info.mem_upper);
-    }
+    // if info.flags & MULTIBOOT_INFO_MEMORY != 0 {
+    //     klog!("Memory lower: {} KB", info.mem_lower);
+    //     klog!("Memory upper: {} KB", info.mem_upper);
+    // }
 
     // elf or aout
     if info.flags & MULTIBOOT_INFO_AOUT_SYMS != 0 && info.flags & MULTIBOOT_INFO_ELF_SHDR != 0 {
@@ -309,16 +341,7 @@ pub unsafe fn parse_mboot_info(ptr: *const u32)
     }
 
     if info.flags & MULTIBOOT_INFO_MEM_MAP != 0 {
-        let nentries = info.mmap_length / core::mem::size_of::<MultibootMmapEntry>() as u32;
-        klog!("Memory map has {} entries", nentries);
-        let mut ptr = info.mmap_addr as *const MultibootMmapEntry;
-        for _i in 0..nentries
-        {
-            let entry = ptr.read_unaligned();
-            klog!("Mmap entry : size({}) addr({:p}) len({} KB) type({})",
-                  {entry.size}, {entry.addr as *const u32}, {entry.len/1024}, {entry.type_});
-            ptr = ptr.offset(1);
-        }
-        klog!("Address of frame buffer : {:p}", info.framebuffer_addr as *const u32);
+      parse_memory_map(info);
     }
+  }
 }

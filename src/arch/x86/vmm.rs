@@ -3,6 +3,7 @@ use crate::klog;
 pub fn init()
 {
     klog!("Initializing VMM");
+    loop{};
 }
 
 // allocate n bytes 
