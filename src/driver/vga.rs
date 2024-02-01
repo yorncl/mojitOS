@@ -48,7 +48,8 @@ pub fn _print(args: fmt::Arguments) {
 impl VGA {
     pub fn new() -> VGA {
         VGA {
-            buffer: unsafe { &mut *(0xb8000 as *mut Buffer)}, 
+            // buffer: unsafe { &mut *(0xb8000 as *mut Buffer)}, 
+            buffer: unsafe { &mut *(0xC00b8000 as *mut Buffer)}, 
             x: 0,
             y: 0,
         }

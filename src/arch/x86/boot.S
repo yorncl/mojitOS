@@ -1,9 +1,10 @@
 
 global loader
 global stack_ptr
-global start
+global kernel_bootstrap
 
 extern kstart
+extern setup_early_paging
 
 MODULEALIGN equ 1<<0
 MEMINFO equ 1<<1
@@ -22,9 +23,15 @@ MultiBootHeader:
 
 section .text
 
+HIGH_MAPPING_START equ 0xC0000000
 
-start:
-  mov esp, stack+STACKSIZE
+kernel_bootstrap:
+  mov esp, (stack+STACKSIZE - HIGH_MAPPING_START) ; TODO are we clear on this ? Am I sure it doesn't break ?
+ 
+  call setup_early_paging
+
+  add esp, HIGH_MAPPING_START
+
 
   push ebx ; multiboot info structure pointer
   push eax ; multiboot magic number

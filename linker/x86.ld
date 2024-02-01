@@ -1,4 +1,4 @@
-ENTRY(start)
+ENTRY(kernel_bootstrap)
 OUTPUT(elf32-i386)
 
 SECTIONS
@@ -17,6 +17,7 @@ SECTIONS
     . += 0xC0000000;
 
   .text ALIGN(4K) : AT (ADDR (.text) - 0xC0000000) {
+  /* .text ALIGN(4K) : { */
 	  . = ALIGN(8);
 	_TEXT_START_ = .;
 	    *(.text)
@@ -25,6 +26,7 @@ SECTIONS
   }
 
   .data ALIGN(4K) : AT (ADDR (.data) - 0xC0000000)  {
+  /* .data ALIGN(4K) : { */
 	_DATA_START_ = .;
 	    *(.data)
 	    *(.data.*)
@@ -32,6 +34,7 @@ SECTIONS
   }
 
   .rodata ALIGN(4K) : AT (ADDR (.rodata) - 0xC0000000)  {
+  /* .rodata ALIGN(4K) : { */
 	_DATA_START_ = .;
 	    *(.rodata)
 	    *(.rodata.*)
@@ -39,6 +42,7 @@ SECTIONS
   }
 
   .bss ALIGN(4K) : AT (ADDR (.bss) - 0xC0000000)  {
+  /* .bss ALIGN(4K) : { */
 	_BSS_START_ = .;
 	    *(.bss)
 	_BSS_END_ = .;
