@@ -53,10 +53,6 @@ setup_early_paging:
   or eax, 0x80000000 ; paging bit
   mov cr0, eax
   
-  lea eax, [higher_half]
-  jmp eax
-
-  higher_half:
 
   pop ecx
   pop ebx

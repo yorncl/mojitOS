@@ -30,6 +30,10 @@ kernel_bootstrap:
  
   call setup_early_paging
 
+  lea eax, [higher_half]
+  jmp eax
+
+  higher_half:
   add esp, HIGH_MAPPING_START
 
 
