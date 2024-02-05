@@ -2,6 +2,16 @@ use crate::{klog, print};
 use core::arch::asm;
 use bitflags::bitflags;
 
+pub const PAGE_SIZE : usize = 0x1000;
+
+macro_rules!  ROUND_PAGE_UP{
+    ($a:expr) => {
+           ($a + paging::PAGE_SIZE) & !(0xfff as usize)
+    };
+}
+
+pub (crate) use ROUND_PAGE_UP;
+
 bitflags! {
     #[derive(Copy, Clone)]
     pub struct PDEF : u32 {

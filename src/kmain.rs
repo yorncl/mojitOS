@@ -6,6 +6,7 @@ use core::panic::PanicInfo;
 mod klib;
 mod driver;
 mod arch;
+mod memory;
 
 // include architecure specific code
 pub use arch::*;

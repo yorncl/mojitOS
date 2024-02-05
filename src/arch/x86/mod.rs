@@ -5,3 +5,5 @@ pub mod idt;
 pub mod paging;
 pub mod vmm;
 pub mod kstart;
+
+pub const PAGE_SIZE : usize = 0x1000;

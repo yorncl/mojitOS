@@ -3,18 +3,14 @@ OUTPUT(elf32-i386)
 
 SECTIONS
 {
-    /* /1* . = 0x1000; *1/ */
-    /* . : { */
-		/* KEEP(*(.multiboot)) */
-	/* } */
     . = 0x00100000;
 
-    kernel_image_start = .;
     .multiboot : {
 	  KEEP(*(.multiboot))
     }
 
     . += 0xC0000000;
+    kernel_image_start = .;
 
   .text ALIGN(4K) : AT (ADDR (.text) - 0xC0000000) {
   /* .text ALIGN(4K) : { */
@@ -47,5 +43,6 @@ SECTIONS
 	    *(.bss)
 	_BSS_END_ = .;
   }
+. += 123;
   kernel_image_end = .;
 }

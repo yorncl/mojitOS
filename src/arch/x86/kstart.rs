@@ -3,10 +3,11 @@ use super::pic;
 use super::idt;
 use super::paging;
 use crate::driver::vga;
-use crate::arch::common::pmm;
 use super::vmm;
 use crate::klog;
-use crate::arch::common::multiboot::*;
+use crate::arch::common::multiboot;
+use crate::memory::allocator::{Bump};
+use crate::memory;
 
 use core::arch::asm;
 
@@ -30,51 +31,97 @@ pub fn get_cpu_mode() -> &'static str {
         "wtf"
     }
 }
-
 extern "C" {
     static kernel_image_start : u32;
     static kernel_image_end : u32;
 }
 
+
+fn setup_bump(start: usize) -> &'static mut Bump
+{
+    let bump : &'static mut Bump = unsafe {&mut*(start as *mut Bump)};
+    bump.start = start;
+    bump.size = core::mem::size_of::<Bump>();
+    bump
+}
+
+fn setup_buddy()
+{
+}
+
+// Entrypoint post boot initialization
+// At this point the first 4MB of physical memory containing the kernel are mapped at two places
 #[no_mangle]
 pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 {
-    vga::io_init(); // TODO this is primitive logging, maybe we need to wait for the whole memory
-                    // to setup
+    // early vga logging
+    vga::io_init();
     klog!("VGA initialized");
 
-    loop{}
-    // klog!("Multiboot: magic({:x}) mboot({:p})", magic, mboot);
-    parse_mboot_info(mboot);
+    let kstart: usize;
+    let kend: usize;
     unsafe {
-        klog!("This is the kernel's start {:p}", &kernel_image_start);
-        klog!("This is the kernel's start {:x}", &kernel_image_start);
-        klog!("This is the kernel's end {:p}", &kernel_image_end);
+        klog!("Kernel start {:p}", &kernel_image_start);
+        klog!("Kernel end {:p}", &kernel_image_end);
+        kstart = &kernel_image_start as *const u32 as usize;
+        kend = &kernel_image_end as *const u32 as usize;
     }
-    // klog!("This is reload_segments's address {:p}", reload_segments as *const());
-    unsafe { asm!("cli"); }
-    klog!("CPU mode: {}", get_cpu_mode());
-    gdt::load();
-    klog!("GDT loaded");
-    pic::setup(); // TODO error handling in rust 
-    klog!("PIC setup");
-    idt::setup();
-    klog!("IDT setup");
-    unsafe { asm!("sti"); }
+    // TODO should I calulate this before jumping to kstart, as it might require identity mapping more pages
+    // at the start ?
+    let ksize = (kend - kstart)/1024; 
+    klog!("Kernel size : {}KB", ksize);
+    let memstart = paging::ROUND_PAGE_UP!(kend);
+    klog!("Start of free mem: 0x{:x}", paging::ROUND_PAGE_UP!(kend));
+    klog!("Multiboot: magic({:x}) mboot({:p})", magic, mboot);
 
 
-    // Physical memory manager
-    // Setting up the necessary data structures
-    pmm::init();
+    // Figuring out the physical memory layout
+    // Here we assume the kernel is booted using multiboot
+    use multiboot::MbootError;
+    match multiboot::parse_mboot_info(mboot)
+    {
+            Err(MbootError::InvalidFlags) => {panic!("Multiboot flags malformed")},
+            Err(MbootError::NoMemoryMap) => {panic!("No memory map")}, // TODO BIOS functions ?
+            Ok(()) => (),
+    }
 
-    // Setting up the kernel virtual memory
-    // This functions will setup all the necessary structures for page management
-    // It will setup the PMM to reflect the current state of the memory
-    vmm::init();
+    klog!("Physical Memory regions:");
+    for i in 0..10  {
+        let entry;
+        unsafe {
+            entry = memory::PHYS_MEM[i];
+            klog!("- {entry:?}");
+        };
+    }
+    loop{}
 
-    // Once everything is ready, enable the paging
-    paging::enable();
-    // Memory management should be setup from there
+    // let bump = setup_bump(memstart);
+    // bump.allocate(n);
+    // loop {}
+    // // klog!("This is reload_segments's address {:p}", reload_segments as *const());
+    // unsafe { asm!("cli"); }
+    // klog!("CPU mode: {}", get_cpu_mode());
+    // gdt::load();
+    // klog!("GDT loaded");
+    // pic::setup(); // TODO error handling in rust 
+    // klog!("PIC setup");
+    // idt::setup();
+    // klog!("IDT setup");
+    // unsafe { asm!("sti"); }
 
-    crate::kmain();    
+
+    // // Physical memory manager
+    // // Setting up the necessary data structures
+    // pmm::init();
+
+    // // Setting up the kernel virtual memory
+    // // This functions will setup all the necessary structures for page management
+    // // It will setup the PMM to reflect the current state of the memory
+    // vmm::init();
+
+    // // Once everything is ready, enable the paging
+    // paging::enable();
+    // // Memory management should be setup from there
+
+    // crate::kmain();    
 }

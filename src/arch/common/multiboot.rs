@@ -279,56 +279,53 @@ struct MultibootApmInfo
 }
 
 
-use super::meminfo;
+use crate::memory;
+use crate::memory::{RegionType};
+
 // will store necessary information for the pmm in a structure 
 // we want to identify the biggest block of main memory to use
 // TODO manage more main memory blocks ?
 fn parse_memory_map(info : &MultibootInfo)
 {
-  let mut size : usize = 0;
-  let mut start : usize = 0;
-  let nentries = info.mmap_length / core::mem::size_of::<MultibootMmapEntry>() as u32;
+  let nentries = info.mmap_length as usize / core::mem::size_of::<MultibootMmapEntry>();
 
-  // klog!("Memory map has {} entries", nentries);
+  klog!("Memory map has {} entries", nentries);
   let mut ptr = info.mmap_addr as *const MultibootMmapEntry;
-  for _i in 0..nentries
+  for i in 0..nentries
   {
       let entry = unsafe {ptr.read_unaligned()};
-      // klog!("Mmap entry : size({}) addr({:p}) len({} KB) type({})",
-      //       {entry.size}, {entry.addr as *const u32}, {entry.len/1024}, {entry.type_});
       // if the memory is usable
-      if entry.type_ == 1 && entry.len as usize > size {
-        size = entry.len as usize;
-        start = entry.addr as usize;
+      unsafe {
+        memory::PHYS_MEM[i] = memory::PhysicalRegion::new(entry.addr as usize, entry.size as usize, entry.type_ as usize);
       }
       ptr = unsafe {ptr.offset(1)};
   }
-  if size <= meminfo::MIN_REQUIRED_MEMORY { // TODO arbitrary choice
-    panic!("No physical memory block bigger than 10 MB");
-  }
-  meminfo::set_mem_info(start, size);
-  // klog!("Main memory : start(0x{:x}), size({})", meminfo::get_mem_start(), meminfo::get_mem_size());
 }
 
-pub fn parse_mboot_info(ptr: *const u32)
+pub enum MbootError
 {
+    NoMemoryMap,
+    InvalidFlags
+}
+use MbootError::*;
+
+pub fn parse_mboot_info(ptr: *const u32) -> Result<(), MbootError>
+{
+  let info : &MultibootInfo;
   unsafe {
-    let info : &MultibootInfo = &*(ptr as *const MultibootInfo);
-    // klog!("Mboot flags euuuh: {:b}", info.flags);
-    // klog!("Boot modules : {}", info.mods_count);
-    // memory info
-    // klog!("Memory lower: {} KB", info.mem_lower);
-    // klog!("Memory upper: {} KB", info.mem_upper);
+     info = &*(ptr as *const MultibootInfo);
+    klog!("Mboot flags euuuh: {:b}", info.flags);
+    klog!("Boot modules : {}", info.mods_count);
 
     // memory map
-    // if info.flags & MULTIBOOT_INFO_MEMORY != 0 {
-    //     klog!("Memory lower: {} KB", info.mem_lower);
-    //     klog!("Memory upper: {} KB", info.mem_upper);
-    // }
+    if info.flags & MULTIBOOT_INFO_MEMORY != 0 {
+        klog!("Memory lower: {} KB", info.mem_lower);
+        klog!("Memory upper: {} KB", info.mem_upper);
+    }
 
     // elf or aout
     if info.flags & MULTIBOOT_INFO_AOUT_SYMS != 0 && info.flags & MULTIBOOT_INFO_ELF_SHDR != 0 {
-      panic!("This is not possible ! Those two flags are mutually exclusive");
+      return Err(InvalidFlags);
     }
     if info.flags & MULTIBOOT_INFO_AOUT_SYMS != 0 {
       klog!("This is an AOUT format");
@@ -343,5 +340,10 @@ pub fn parse_mboot_info(ptr: *const u32)
     if info.flags & MULTIBOOT_INFO_MEM_MAP != 0 {
       parse_memory_map(info);
     }
+    else {
+      return Err(NoMemoryMap);
+    }
+
+    Ok(())
   }
 }

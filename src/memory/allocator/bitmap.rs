@@ -1,5 +1,4 @@
 use crate::klog;
-use super::meminfo;
 
 // TODO locking
 
@@ -61,6 +60,6 @@ fn free_block(i: usize)
 pub fn init()
 {
   unsafe {
-    BITMAP_SIZE = meminfo::get_mem_size() / meminfo::PAGE_SIZE;
+    // BITMAP_SIZE = meminfo::get_mem_size() / meminfo::PAGE_SIZE;
   }
 }
