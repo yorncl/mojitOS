@@ -3,6 +3,9 @@ use core::arch::asm;
 use bitflags::bitflags;
 
 pub const PAGE_SIZE : usize = 0x1000;
+pub const N_PAGES : usize = 1 << 20;
+
+pub struct Frame(pub usize);
 
 macro_rules!  ROUND_PAGE_UP{
     ($a:expr) => {

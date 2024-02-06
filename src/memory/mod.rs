@@ -1,21 +1,22 @@
-pub mod allocator;
+pub mod pmm;
+pub mod vmm;
 
-use core::ops::Add;
+// use core::ops::Add;
+//
+// #[repr(C)]
+// #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+// pub struct Address(pub usize);
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Address(pub usize);
+// impl Add<usize> for Address
+// {
+//     type Output = Address;
 
-impl Add<usize> for Address
-{
-    type Output = Address;
-
-    #[inline(always)]
-    fn add(self, rhs: usize) -> Self::Output
-    {
-        Self(self.0 + rhs)
-    }
-}
+//     #[inline(always)]
+//     fn add(self, rhs: usize) -> Self::Output
+//     {
+//         Self(self.0 + rhs)
+//     }
+// }
 
 #[derive(Clone, Copy, Debug)]
 pub enum RegionType
@@ -29,7 +30,7 @@ pub enum RegionType
 }
 use RegionType::*;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct PhysicalRegion
 {
         start: usize,
@@ -56,7 +57,19 @@ impl PhysicalRegion
     }
 }
 
+use core::fmt;
 
+impl fmt::Debug for PhysicalRegion
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+    {
+        f.debug_struct("PhysicalRegion")
+            .field("start", &format_args!("{:p}", self.start as *const usize))
+            .field("size", &format_args!("{}KB", self.size/1024))
+            .field("type", &self.rtype)
+            .finish()
+    }
+}
 
 // Static structure to hold information about memrory banks
 pub  static mut PHYS_MEM : [PhysicalRegion; 10] = [PhysicalRegion {start : 0, size: 0, rtype: Unknown}; 10];

@@ -6,51 +6,43 @@ use crate::driver::vga;
 use super::vmm;
 use crate::klog;
 use crate::arch::common::multiboot;
-use crate::memory::allocator::{Bump};
+use crate::memory::vmm::bump::{Bump};
 use crate::memory;
+use memory::pmm;
 
 use core::arch::asm;
 
-pub fn get_cpu_mode() -> &'static str {
-    let mode: u32;
-    unsafe {
-        asm!(
-            "mov {0}, cr0",
-            "and eax, 0x1",
-            out(reg) mode,
-            options(nostack, preserves_flags)
-        );
-    }
+/// Early dumb allocator, used to bootstrap memory management
+static mut BUMP_ALLOCATOR : Bump = Bump{start: 0, size:0 };
 
-    if mode == 0 {
-        "real mode"
-    } else if mode == 1 {
-        "protected mode"
-    } 
-    else {
-        "wtf"
-    }
-}
+// pub fn get_cpu_mode() -> &'static str {
+//     let mode: u32;
+//     unsafe {
+//         asm!(
+//             "mov {0}, cr0",
+//             "and eax, 0x1",
+//             out(reg) mode,
+//             options(nostack, preserves_flags)
+//         );
+//     }
+
+//     if mode == 0 {
+//         "real mode"
+//     } else if mode == 1 {
+//         "protected mode"
+//     } 
+//     else {
+//         "wtf"
+//     }
+// }
+
 extern "C" {
     static kernel_image_start : u32;
     static kernel_image_end : u32;
 }
 
-
-fn setup_bump(start: usize) -> &'static mut Bump
-{
-    let bump : &'static mut Bump = unsafe {&mut*(start as *mut Bump)};
-    bump.start = start;
-    bump.size = core::mem::size_of::<Bump>();
-    bump
-}
-
-fn setup_buddy()
-{
-}
-
-// Entrypoint post boot initialization
-// At this point the first 4MB of physical memory containing the kernel are mapped at two places
+/// Entrypoint post boot initialization
+/// At this point the first 4MB of physical memory containing the kernel are mapped at two places
 #[no_mangle]
 pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 {
@@ -70,8 +62,6 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     // at the start ?
     let ksize = (kend - kstart)/1024; 
     klog!("Kernel size : {}KB", ksize);
-    let memstart = paging::ROUND_PAGE_UP!(kend);
-    klog!("Start of free mem: 0x{:x}", paging::ROUND_PAGE_UP!(kend));
     klog!("Multiboot: magic({:x}) mboot({:p})", magic, mboot);
 
 
@@ -93,9 +83,16 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
             klog!("- {entry:?}");
         };
     }
+
+    let memstart = paging::ROUND_PAGE_UP!(kend);
+    klog!("Start of free mem: 0x{:x}", paging::ROUND_PAGE_UP!(kend));
+    unsafe { BUMP_ALLOCATOR = Bump{start: memstart, size: 0};}
+
+
+
+
     loop{}
 
-    // let bump = setup_bump(memstart);
     // bump.allocate(n);
     // loop {}
     // // klog!("This is reload_segments's address {:p}", reload_segments as *const());

@@ -293,12 +293,14 @@ fn parse_memory_map(info : &MultibootInfo)
   let mut ptr = info.mmap_addr as *const MultibootMmapEntry;
   for i in 0..nentries
   {
-      let entry = unsafe {ptr.read_unaligned()};
-      // if the memory is usable
       unsafe {
-        memory::PHYS_MEM[i] = memory::PhysicalRegion::new(entry.addr as usize, entry.size as usize, entry.type_ as usize);
+        let entry = ptr.read_unaligned();
+      // if the memory is usable
+        // klog!("Mmap entry : size({}) addr({:p}) len({} KB) type({})",
+            // {entry.size}, {entry.addr as *const u32}, {entry.len/1024}, {entry.type_});
+        memory::PHYS_MEM[i] = memory::PhysicalRegion::new(entry.addr as usize, entry.len as usize, entry.type_ as usize);
+        ptr = ptr.offset(1);
       }
-      ptr = unsafe {ptr.offset(1)};
   }
 }
 
