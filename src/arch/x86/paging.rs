@@ -2,14 +2,13 @@ use crate::{klog, print};
 use core::arch::asm;
 use bitflags::bitflags;
 
-pub const PAGE_SIZE : usize = 0x1000;
-pub const N_PAGES : usize = 1 << 20;
 
+/// Frame structure for memory system
 pub struct Frame(pub usize);
 
 macro_rules!  ROUND_PAGE_UP{
     ($a:expr) => {
-           ($a + paging::PAGE_SIZE) & !(0xfff as usize)
+           ($a + super::PAGE_SIZE) & !(0xfff as usize)
     };
 }
 
@@ -46,85 +45,6 @@ bitflags! {
     }
 }
 
-type PDE = u32;
-type PTE = u32;
-
-trait BitFlags<T, U> {
-    fn set_flags(&mut self, flags : U);
-    fn unset_flags(&mut self, flags : U);
-}
-impl BitFlags<u32, PDEF> for PDE {
-    fn set_flags(&mut self, flags : PDEF)
-    {
-        *self |= flags.bits();
-    }
-    fn unset_flags(&mut self, flags : PDEF)
-    {
-        *self &= !flags.bits();
-    }
-}
-impl BitFlags<u32, PTEF> for PDE {
-    fn set_flags(&mut self, flags : PTEF)
-    {
-        *self |= flags.bits();
-    }
-    fn unset_flags(&mut self, flags : PTEF)
-    {
-        *self &= !flags.bits();
-    }
-}
-
-#[repr(align(4096))]
-struct AlignedDirectory([PDE; 1024]);
-#[repr(align(4096))]
-struct AlignedPageTable([PTE; 1024]);
-
-extern "C"
-{
-    fn load_page_directory(page_directory: *const PDE);
-    fn enable_paging();
-}
-
-pub fn address_translate()
-{
-}
-
-pub fn setup_early()
-{
-    let mut page_directory = AlignedDirectory([0; 1024]);
-    let mut page_table = AlignedPageTable([0; 1024]);
-    for entry in page_directory.0.iter_mut()
-    {
-            entry.set_flags(PDEF::Write);
-    }
-    for (i, entry) in page_table.0.iter_mut().enumerate()
-    {
-            *entry = (i * 0x1000) as u32;
-            entry.set_flags(PTEF::Present | PTEF::Write | PTEF:: User);
-    }
-    unsafe {
-        page_directory.0[0] = (&page_table.0 as *const u32) as u32 & 0xfffff000;
-        klog!("Page directory first entry : {:b}", page_directory.0[0]);
-        page_directory.0[0].set_flags(PDEF::Present | PDEF::Write | PDEF::User);
-        klog!("Page directory first entry : {:b}", page_directory.0[0]);
-        // print binary first PDE
-        klog!("Page Directory Entry : {:p}", &page_directory);
-        klog!("Page Table : {:p}", &page_table);
-        klog!("Page directory first entry : {:b}", page_directory.0[0]);
-        load_page_directory(&page_directory.0 as *const u32);
-        enable_paging();
-    }
-    klog!("Page Directory Entry : {}", page_directory.0[0]);
-    let ptr = 0xdeadbeaf as *mut u8;
-    unsafe { *ptr = 42; }
-}
-
-// TODO change this function
-pub fn enable()
-{
-    setup_early();
-}
-
 bitflags! {
     #[derive(Copy, Clone)]
     pub struct PF : u32
@@ -141,6 +61,17 @@ bitflags! {
     }
 }
 
+type PDE = u32;
+type PTE = u32;
+
+extern "C"
+{
+    fn load_page_directory(page_directory: *const PDE);
+    fn enable_paging();
+}
+
+
+// TODO is this code archiecture specific ?
 pub fn page_fault_handler(instruction_pointer: u32, code: u32)
 {
     let address : u32;

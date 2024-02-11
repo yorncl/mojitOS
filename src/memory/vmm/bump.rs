@@ -1,5 +1,7 @@
 // use super::super::Address;
 
+use crate::memory::BUMP_ALLOCATOR;
+
 
 // Bump allocator, used to bootstrap the other allocators
 pub struct Bump
@@ -7,6 +9,32 @@ pub struct Bump
     pub start: usize, // TOOD shoudl I use crate::memory::Address type ?
     pub size: usize
 }
+
+pub struct RawBox<T>
+{
+        data: *const T,
+}
+
+impl<T> RawBox<T>
+{
+    pub fn new(s: T) -> Self
+    {
+        unsafe {
+            let pointer = BUMP_ALLOCATOR.allocate(core::mem::size_of::<T>());
+            RawBox { data : pointer as *const T }
+        }
+    }
+}
+
+use core::fmt;
+
+impl<T> fmt::Display for RawBox<T>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RawBox(at: {:p})", self.data)
+    }
+}
+
 
 impl Bump
 {

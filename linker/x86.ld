@@ -43,6 +43,5 @@ SECTIONS
 	    *(.bss)
 	_BSS_END_ = .;
   }
-. += 123;
   kernel_image_end = .;
 }

@@ -236,8 +236,10 @@ struct MultiBootColor
 #[derive(Copy, Clone)]
 struct MultibootMmapEntry
 {
+  /// size of the entry, see multiboot spec
   pub size: Multibootu32,
   pub addr: Multibootu64,
+  /// Actual length of the memory region
   pub len: Multibootu64,
 // #define MULTIBOOT_MEMORY_AVAILABLE              1
 // #define MULTIBOOT_MEMORY_RESERVED               2
@@ -280,10 +282,8 @@ struct MultibootApmInfo
 
 
 use crate::memory;
-use crate::memory::{RegionType};
 
 // will store necessary information for the pmm in a structure 
-// we want to identify the biggest block of main memory to use
 // TODO manage more main memory blocks ?
 fn parse_memory_map(info : &MultibootInfo)
 {
@@ -291,13 +291,17 @@ fn parse_memory_map(info : &MultibootInfo)
 
   klog!("Memory map has {} entries", nentries);
   let mut ptr = info.mmap_addr as *const MultibootMmapEntry;
+  
+  // Used to check if memory is contiguous
+  // TODO handle non contiguous memory
+  let mut next_start: usize = 0;
   for i in 0..nentries
   {
       unsafe {
         let entry = ptr.read_unaligned();
       // if the memory is usable
-        // klog!("Mmap entry : size({}) addr({:p}) len({} KB) type({})",
-            // {entry.size}, {entry.addr as *const u32}, {entry.len/1024}, {entry.type_});
+        // assert!(next_start == entry.addr as usize, "The physical memory is not contiguous !");
+        // next_start += entry.len as usize;
         memory::PHYS_MEM[i] = memory::PhysicalRegion::new(entry.addr as usize, entry.len as usize, entry.type_ as usize);
         ptr = ptr.offset(1);
       }

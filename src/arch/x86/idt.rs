@@ -1,5 +1,5 @@
 use core::arch::asm;
-use crate::{klog, print};
+use crate::klog;
 use super::paging::page_fault_handler;
 
 #[repr(C)]

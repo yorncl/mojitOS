@@ -1,19 +1,11 @@
-use super::gdt;
-use super::pic;
-use super::idt;
 use super::paging;
 use crate::driver::vga;
-use super::vmm;
-use crate::klog;
+use crate::{klog, memory};
 use crate::arch::common::multiboot;
-use crate::memory::vmm::bump::{Bump};
-use crate::memory;
-use memory::pmm;
+use crate::memory::pmm::PageManager;
+use crate::memory::vmm::bump::{Bump, RawBox};
+use crate::memory::{BUMP_ALLOCATOR};
 
-use core::arch::asm;
-
-/// Early dumb allocator, used to bootstrap memory management
-static mut BUMP_ALLOCATOR : Bump = Bump{start: 0, size:0 };
 
 // pub fn get_cpu_mode() -> &'static str {
 //     let mode: u32;
@@ -64,6 +56,13 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     klog!("Kernel size : {}KB", ksize);
     klog!("Multiboot: magic({:x}) mboot({:p})", magic, mboot);
 
+    // setting the first 4MB of PMM bitmap TODO api seems dirty
+    unsafe {
+        memory::pmm::PMM.fill_range(0, 4096);
+        klog!("alloc page i = {}", memory::pmm::PMM.alloc_page().unwrap());
+        klog!("alloc page i = {}", memory::pmm::PMM.alloc_page().unwrap());
+        klog!("alloc page i = {}", memory::pmm::PMM.alloc_page().unwrap());
+    }
 
     // Figuring out the physical memory layout
     // Here we assume the kernel is booted using multiboot
@@ -86,10 +85,22 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 
     let memstart = paging::ROUND_PAGE_UP!(kend);
     klog!("Start of free mem: 0x{:x}", paging::ROUND_PAGE_UP!(kend));
-    unsafe { BUMP_ALLOCATOR = Bump{start: memstart, size: 0};}
+    unsafe { 
+        BUMP_ALLOCATOR = Bump{start: memstart, size: 0};
+    }
 
 
+    struct ChadStruct {
+        chad: u64,
+        chad_bis: u64
+    }
 
+    let a = RawBox::new(69);
+    let chad = RawBox::new(ChadStruct{chad: 69, chad_bis: 420});
+    let b = RawBox::new(420);
+    klog!("{}", a);
+    klog!("{}", chad);
+    klog!("{}", b);
 
     loop{}
 
