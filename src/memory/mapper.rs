@@ -1,6 +1,8 @@
 use crate::memory::Frame;
 
-pub trait Mapper
+pub use crate::arch::paging::Mapper;
+
+pub trait MapperInterface
 {
     fn map_to_virt(f: Frame, address: usize) -> Result<(), ()>;
     fn virt_to_phys(address: usize) -> usize;

@@ -5,18 +5,11 @@
 ; thus in order for all the adress to be valid, we must first create the double mapping and enable paging
 
 global setup_early_paging
+global EPD_PHYS
+global EARLY_PAGE_DIRECTORY
 
 HIGH_MAPPING_START equ 0xC0000000
 PDE_INDEX equ (HIGH_MAPPING_START >> 22) ; only the 10 leftmost bits are used to index into the PDE
-
-
-align 4096
-EARLY_PAGE_TABLE:
-  times 1024 dd 0
-
-align 4096
-EARLY_PAGE_DIRECTORY:
-  times 1024 dd 0
 
 section .text
 
@@ -60,4 +53,13 @@ setup_early_paging:
 
   ret
 
+
+section .data
+align 4096
+EARLY_PAGE_TABLE:
+  times 1024 dd 0
+
+align 4096
+EARLY_PAGE_DIRECTORY:
+  times 1024 dd 0
 

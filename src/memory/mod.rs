@@ -56,6 +56,18 @@ impl fmt::Debug for PhysicalRegion
     }
 }
 
+
+pub trait MapperInterface
+{
+    fn map_to_virt(f: Frame, address: usize) -> Result<(), ()>;
+    fn virt_to_phys(address: usize) -> usize;
+}
+
+// Exposing arch specific structure for clarity 
+
+// Interface for mapping
+pub use crate::arch::paging::Mapper;
+
 // Constants
 pub const PAGE_SIZE : usize = crate::arch::PAGE_SIZE;
 

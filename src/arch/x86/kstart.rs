@@ -1,10 +1,15 @@
+use core::ops::{Deref, DerefMut};
+
 use super::paging;
 use crate::driver::vga;
+use crate::memory::mapper::MapperInterface;
 use crate::{klog, memory};
 use crate::arch::common::multiboot;
 use crate::memory::pmm::PageManager;
 use crate::memory::vmm::bump::{Bump, RawBox};
 use crate::memory::{BUMP_ALLOCATOR};
+// use crate::memory::mapper::Mapper;
+use super::paging::Mapper;
 
 
 // pub fn get_cpu_mode() -> &'static str {
@@ -101,7 +106,10 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     klog!("{}", a);
     klog!("{}", chad);
     klog!("{}", b);
-
+    
+    // Setting the address of the early kernel page directory
+    paging::init_post_jump();
+    klog!("virt to phys : {:x}", Mapper::virt_to_phys(chad.to_ptr() as usize));
     loop{}
 
     // bump.allocate(n);
