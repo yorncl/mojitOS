@@ -302,7 +302,8 @@ fn parse_memory_map(info : &MultibootInfo)
       // if the memory is usable
         // assert!(next_start == entry.addr as usize, "The physical memory is not contiguous !");
         // next_start += entry.len as usize;
-        memory::PHYS_MEM[i] = memory::PhysicalRegion::new(entry.addr as usize, entry.len as usize, entry.type_ as usize);
+        memory::phys_mem().add_entry(
+          memory::PhysicalRegion::new(entry.addr as usize, entry.len as usize, entry.type_ as usize));
         ptr = ptr.offset(1);
       }
   }

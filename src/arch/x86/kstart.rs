@@ -1,15 +1,12 @@
-use core::ops::{Deref, DerefMut};
-
 use super::paging;
 use crate::driver::vga;
 use crate::memory::mapper::MapperInterface;
-use crate::{klog, memory};
+use crate::klog;
 use crate::arch::common::multiboot;
-use crate::memory::pmm::PageManager;
-use crate::memory::vmm::bump::{Bump, RawBox};
-use crate::memory::{BUMP_ALLOCATOR};
-// use crate::memory::mapper::Mapper;
 use super::paging::Mapper;
+use crate::memory;
+use crate::memory::pmm;
+use crate::memory::pmm::{Frame, FrameRange};
 
 
 // pub fn get_cpu_mode() -> &'static str {
@@ -62,12 +59,7 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     klog!("Multiboot: magic({:x}) mboot({:p})", magic, mboot);
 
     // setting the first 4MB of PMM bitmap TODO api seems dirty
-    unsafe {
-        memory::pmm::PMM.fill_range(0, 4096);
-        klog!("alloc page i = {}", memory::pmm::PMM.alloc_page().unwrap());
-        klog!("alloc page i = {}", memory::pmm::PMM.alloc_page().unwrap());
-        klog!("alloc page i = {}", memory::pmm::PMM.alloc_page().unwrap());
-    }
+
 
     // Figuring out the physical memory layout
     // Here we assume the kernel is booted using multiboot
@@ -80,36 +72,42 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     }
 
     klog!("Physical Memory regions:");
-    for i in 0..10  {
-        let entry;
-        unsafe {
-            entry = memory::PHYS_MEM[i];
-            klog!("- {entry:?}");
-        };
+    for entry in memory::phys_mem().regions  {
+        klog!("- {entry:?}");
     }
+    // klog!("Max physical address : 0x{:x}", n_phys_address - 1);
 
-    let memstart = paging::ROUND_PAGE_UP!(kend);
-    klog!("Start of free mem: 0x{:x}", paging::ROUND_PAGE_UP!(kend));
-    unsafe { 
-        BUMP_ALLOCATOR = Bump{start: memstart, size: 0};
-    }
+    // This will filter out unusable pages
+    klog!("Start init pmm");
+    pmm::init(memory::phys_mem());
+    // Blocking out the first 4MB as they will always be mapped
+    pmm::fill_range(FrameRange{start: Frame(0), size: 4096});
+    klog!("End init pmm");
+
+    // let memstart = paging::ROUND_PAGE_UP!(kend);
+    // klog!("Start of free mem: 0x{:x}", paging::ROUND_PAGE_UP!(kend));
+    // unsafe { 
+    //     BUMP_ALLOCATOR = Bump{start: memstart, size: 0};
+    // }
 
 
-    struct ChadStruct {
-        chad: u64,
-        chad_bis: u64
-    }
-
-    let a = RawBox::new(69);
-    let chad = RawBox::new(ChadStruct{chad: 69, chad_bis: 420});
-    let b = RawBox::new(420);
-    klog!("{}", a);
-    klog!("{}", chad);
-    klog!("{}", b);
+    // struct ChadStruct {
+    //     chad: u64,
+    //     chad_bis: u64
+    // }
+    // let a = RawBox::new(69);
+    // let chad = RawBox::new(ChadStruct{chad: 69, chad_bis: 420});
+    // let b = RawBox::new(420);
+    // klog!("{}", a);
+    // klog!("{}", chad);
+    // klog!("{}", b);
     
-    // Setting the address of the early kernel page directory
     paging::init_post_jump();
-    klog!("virt to phys : {:x}", Mapper::virt_to_phys(chad.to_ptr() as usize));
+    klog!("virt to phys : {:?}", Mapper::virt_to_phys(0x1000));
+    klog!("virt to phys : {:?}", Mapper::virt_to_phys(0xC0001000));
+
+    // vmm::init();
+
     loop{}
 
     // bump.allocate(n);

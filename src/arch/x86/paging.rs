@@ -1,13 +1,11 @@
 use crate::memory::mapper::MapperInterface;
 use crate::{klog, print};
-use core::ops::DerefMut;
-use core::{arch::asm, ops::Deref};
+use core::ops::{Deref, DerefMut};
+use core::arch::asm;
 use bitflags::bitflags;
 use crate::memory;
-use crate::memory::vmm::bump::RawBox;
-
-/// Frame structure for memory system
-pub struct Frame(pub usize);
+use crate::utils::rawbox::RawBox;
+use crate::memory::pmm::Frame;
 
 pub static mut PAGING_BASE : RawBox<PageDir> = RawBox {data: 0 as *mut PageDir};
 
@@ -83,7 +81,7 @@ impl PageDir {
     #[inline(always)]
     pub fn set_entry(&mut self, i: usize, address: usize, flags: usize)
     {
-        self.entries[i] = (address & !0xfff) | 3; // TODO convert to flags 
+        self.entries[i] = (address & !0xfff) | flags; // TODO convert to flags 
     }
 }
 
@@ -104,12 +102,9 @@ struct PageTable
         entries: [PTE; 1024]
 }
 
-
 pub struct X86Mapper {}
 pub use X86Mapper as Mapper;
 impl X86Mapper {}
-
-
 
 #[inline(always)]
 fn get_base() -> &'static PageDir
@@ -117,25 +112,40 @@ fn get_base() -> &'static PageDir
     unsafe {PAGING_BASE.deref()}
 }
 
-
-
 impl memory::mapper::MapperInterface for X86Mapper
 {
     fn map_to_virt(f: Frame, address: usize) -> Result<(), ()>
     {
+        // Flush the tlb  TODO should we queue changes to avoid extra flushing ?
+        Self::flush();
         Ok(())
     }
-    fn virt_to_phys(address: usize) -> usize
+
+    fn virt_to_phys(address: usize) -> Option<usize>
     {
+        let pde_index = address >> 22;
+        if get_base().entries[pde_index] == 0 {
+            return None;
+        }
         let offset = address & 0xfff;
         let pte_offset = ((address >> 12) & 0x3ff) * core::mem::size_of::<u32>(); // TODO refactor types
-        let pde_index = address >> 22;
+
         let special = (0x3ff << 22) | pde_index << 12 | pte_offset;
         let pte : usize;
         unsafe { 
             pte = *(special as *const usize) & !0xfff;
         }
-        pte + offset
+        Some(pte + offset)
+    }
+
+    fn flush()
+    {
+        unsafe {
+            asm!("push eax",
+            "mov eax, cr3",
+            "mov cr3, eax",
+            "pop eax");
+        }
     }
 }
 
@@ -143,15 +153,19 @@ pub fn init_post_jump()
 {
         unsafe { 
             // We will use the static early page dir at first TODO should we change it ?
-            // TODO oh my god do a macro for symbol I
-            // shot myself in the foo multiple times already it hurts so bad
+            // TODO oh my god do a macro for getting symbols's address I
+            // shot myself in the foot multiple times already it hurts so bad
             PAGING_BASE = RawBox::from_ptr(&EARLY_PAGE_DIRECTORY);
             let dir: &mut PageDir = PAGING_BASE.deref_mut();
 
             // setting the recursive mapping entry at the last entry of the table
             // We lose 4MB of virtual space, but we gain happiness
             // TODO this is very naky, EPD_PHYS is the load address
-            dir.set_entry(0x3ff, &EPD_PHYS as *const PageDir as usize, 0);
+            dir.set_entry(0x3ff, &EPD_PHYS as *const PageDir as usize, 3);
+
+            // remove identity mapping
+            dir.set_entry(0, 0, 0);
+            X86Mapper::flush();
         }
 }
 

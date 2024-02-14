@@ -7,6 +7,7 @@ mod klib;
 mod driver;
 mod arch;
 mod memory;
+mod utils;
 
 // include architecure specific code
 pub use arch::*;

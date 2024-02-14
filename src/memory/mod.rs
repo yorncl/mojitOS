@@ -3,7 +3,7 @@ pub mod vmm;
 pub mod mapper;
 
 use core::fmt;
-use crate::arch::Frame;
+use crate::memory::pmm::Frame;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RegionType
@@ -63,7 +63,24 @@ pub trait MapperInterface
     fn virt_to_phys(address: usize) -> usize;
 }
 
-// Exposing arch specific structure for clarity 
+
+
+const MAX_PHYS_REGIONS: usize = 10;
+/// Holds list of physical memory regions
+pub struct PhysicalMemory {
+    pub regions: [PhysicalRegion; MAX_PHYS_REGIONS],
+    /// Number of entries
+    pub size: usize
+}
+
+impl PhysicalMemory {
+    pub fn add_entry(&mut self, region: PhysicalRegion) {
+        assert!(self.size < MAX_PHYS_REGIONS, "Too many physical regions");
+        self.regions[self.size] = region;
+        self.size += 1;
+    }
+}
+
 
 // Interface for mapping
 pub use crate::arch::paging::Mapper;
@@ -72,11 +89,14 @@ pub use crate::arch::paging::Mapper;
 pub const PAGE_SIZE : usize = crate::arch::PAGE_SIZE;
 
 /// Static structure to hold information about memroy regions
-pub static mut PHYS_MEM : [PhysicalRegion; 10] = [PhysicalRegion {start : 0, size: 0, rtype: RegionType::Unknown}; 10];
+static mut PHYS_MEM : PhysicalMemory = PhysicalMemory{
+    regions:[PhysicalRegion {start : 0, size: 0, rtype: RegionType::Unknown}; 10],
+    size: 0
+};
 
-// Static allocators reference
+#[inline(always)]
+pub fn phys_mem() -> &'static mut PhysicalMemory
+{
+    unsafe { &mut PHYS_MEM }
+}
 
-/// Early bump allocators
-use crate::memory::vmm::bump::Bump;
-
-pub static mut BUMP_ALLOCATOR : Bump = Bump{start: 0, size:0 };
