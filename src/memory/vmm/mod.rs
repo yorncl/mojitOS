@@ -1,11 +1,17 @@
 mod bump;
 mod listalloc;
 
-pub type Allocator = listalloc::ListAllocator;
+pub mod mapper;
+
+use listalloc::ListAllocator;
+
 
 enum AllocError {
     ENOMEM,
 }
+
+#[global_allocator]
+static mut ALLOCATOR : ListAllocator = ListAllocator::default_const();
 
 pub trait KernelAllocator 
 {
@@ -14,5 +20,11 @@ pub trait KernelAllocator
     fn init(&mut self, memstart: usize, size: usize, base_pages: usize);
 }
 
-// #[global_allocator]
 
+#[inline(always)]
+pub fn init(memstart: usize, size: usize, base_pages: usize)
+{
+    unsafe {
+        ALLOCATOR.init(memstart, size, base_pages);
+    }
+}

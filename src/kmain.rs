@@ -2,6 +2,7 @@
 #![no_std]
 
 use core::panic::PanicInfo;
+extern crate alloc;
 
 mod klib;
 mod driver;

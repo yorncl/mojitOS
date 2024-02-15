@@ -19,6 +19,21 @@ pub extern "C" fn memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mu
 }
 
 #[no_mangle]
+pub extern "C" fn memmove(dest: *mut c_void, src: *const c_void, n: usize) -> *mut u8 {
+    let dest = dest as *mut u8;
+    let src = src as *const u8;
+
+    let mut i = 0;
+    while i < n {
+        unsafe {
+            *dest.add(i) = *src.add(i);
+        }
+        i += 1;
+    }
+    dest
+}
+
+#[no_mangle]
 pub extern "C" fn memset(dest: *mut c_void, val: u8, n: usize) -> *mut u8 {
     let mut i = 0;
     let dest = dest as *mut u8;

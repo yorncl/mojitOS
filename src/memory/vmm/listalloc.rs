@@ -1,6 +1,7 @@
+use core::alloc::GlobalAlloc;
 use super::{KernelAllocator, AllocError};
-
 use crate::memory::pmm;
+use alloc::alloc::Layout;
 
 struct Node
 {
@@ -22,7 +23,8 @@ impl KernelAllocator for ListAllocator
         self.size = size;
         
         // allocate the contiguous base pages
-        // let range = pmm::alloc_contiguous_pages();
+        // 400KB for starters
+        let range = pmm::alloc_contiguous_pages(100);
 
         let ptr = memstart as *mut Node;
         let n = Node {size, next: None};
@@ -37,6 +39,14 @@ impl ListAllocator
 {
     fn new() -> Self {
         Self::default()
+    }
+
+    pub const fn default_const() -> Self {
+        ListAllocator { 
+            head: Node {size: 0, next: None},
+            vmemstart: 0,
+            size: 0
+        }
     }
 
     fn add_free_block(&mut self, memstart: usize, size: usize)
@@ -72,4 +82,16 @@ impl Default for ListAllocator
             size: 0
         }
     }
+}
+
+
+unsafe impl GlobalAlloc for ListAllocator
+{
+    // Required methods
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8
+    {
+        0 as *mut u8
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout)
+    {}
 }

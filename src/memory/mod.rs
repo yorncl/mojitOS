@@ -1,9 +1,7 @@
 pub mod pmm;
 pub mod vmm;
-pub mod mapper;
 
 use core::fmt;
-use crate::memory::pmm::Frame;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RegionType
@@ -43,7 +41,6 @@ impl PhysicalRegion
     }
 }
 
-
 impl fmt::Debug for PhysicalRegion
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
@@ -55,15 +52,6 @@ impl fmt::Debug for PhysicalRegion
             .finish()
     }
 }
-
-
-pub trait MapperInterface
-{
-    fn map_to_virt(f: Frame, address: usize) -> Result<(), ()>;
-    fn virt_to_phys(address: usize) -> usize;
-}
-
-
 
 const MAX_PHYS_REGIONS: usize = 10;
 /// Holds list of physical memory regions
@@ -80,10 +68,6 @@ impl PhysicalMemory {
         self.size += 1;
     }
 }
-
-
-// Interface for mapping
-pub use crate::arch::paging::Mapper;
 
 // Constants
 pub const PAGE_SIZE : usize = crate::arch::PAGE_SIZE;

@@ -1,4 +1,4 @@
-use crate::arch;
+use crate::{arch, klog};
 use crate::memory::pmm::{PageManager, Frame, FrameRange};
 use core::fmt;
 
@@ -22,7 +22,7 @@ impl BitMap {
     pub const fn default_const() -> Self {
         BitMap {
             data: [0xff; BITMAP_SIZE/8],
-            size: 0,
+            size: BITMAP_SIZE,
             free_pages: 0
         }
     }

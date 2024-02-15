@@ -1,18 +1,25 @@
-use crate::memory::mapper::MapperInterface;
 use crate::{klog, print};
 use core::ops::{Deref, DerefMut};
 use core::arch::asm;
 use bitflags::bitflags;
 use crate::memory;
 use crate::utils::rawbox::RawBox;
-use crate::memory::pmm::Frame;
+use crate::memory::pmm;
+use crate::memory::pmm::{Frame, FrameRange};
+use super::PAGE_SIZE;
+use crate::memory::vmm::mapper;
 
-pub static mut PAGING_BASE : RawBox<PageDir> = RawBox {data: 0 as *mut PageDir};
+pub static mut MAPPER : RawBox<PageDir> = RawBox {data: 0 as *mut PageDir};
 
 macro_rules!  ROUND_PAGE_UP{
     ($a:expr) => {
            ($a + super::PAGE_SIZE) & !(0xfff as usize)
     };
+}
+
+extern "C" {
+    static EPD_PHYS: PageDir;
+    static EARLY_PAGE_DIRECTORY: PageDir;
 }
 
 pub (crate) use ROUND_PAGE_UP;
@@ -72,10 +79,6 @@ pub struct PageDir
 {
         entries: [PDE; 1024]
 }
-extern "C" {
-    static EPD_PHYS: PageDir;
-    static EARLY_PAGE_DIRECTORY: PageDir;
-}
 
 impl PageDir {
     #[inline(always)]
@@ -83,6 +86,7 @@ impl PageDir {
     {
         self.entries[i] = (address & !0xfff) | flags; // TODO convert to flags 
     }
+
 }
 
 impl Default for PageDir
@@ -93,7 +97,16 @@ impl Default for PageDir
             entries: [0; 1024]
         }
     }
+}
 
+fn flush_tlb()
+{
+    unsafe {
+        asm!("push eax",
+        "mov eax, cr3",
+        "mov cr3, eax",
+        "pop eax");
+    }
 }
 
 #[repr(C, packed)]
@@ -102,29 +115,54 @@ struct PageTable
         entries: [PTE; 1024]
 }
 
-pub struct X86Mapper {}
-pub use X86Mapper as Mapper;
-impl X86Mapper {}
-
 #[inline(always)]
-fn get_base() -> &'static PageDir
+pub fn kernel_mapper() -> &'static mut PageDir
 {
-    unsafe {PAGING_BASE.deref()}
+    unsafe {MAPPER.deref_mut()}
 }
 
-impl memory::mapper::MapperInterface for X86Mapper
+macro_rules! pde_index {
+    ($a: expr) => {
+       $a >> 22
+    };
+}
+
+macro_rules! pte_index {
+    ($a: expr) => {
+       $a >> 12 & (2 << 10 - 1)
+    };
+}
+
+macro_rules! offset {
+    ($a: expr) => {
+       $a & (2 << 12 - 1)
+    };
+}
+
+impl mapper::MapperInterface for PageDir
 {
-    fn map_to_virt(f: Frame, address: usize) -> Result<(), ()>
-    {
-        // Flush the tlb  TODO should we queue changes to avoid extra flushing ?
-        Self::flush();
-        Ok(())
+
+    fn map_single(&mut self, f: Frame, address: usize) -> Result<(), ()> {
+        
+        flush_tlb();
+        Err(())
     }
 
-    fn virt_to_phys(address: usize) -> Option<usize>
+    fn map_range(&mut self, r: FrameRange, address: usize) -> Result<(), ()> {
+        // TODO assert aligned to page 
+
+        let phys_start = r.start.0 * PAGE_SIZE; // TODO more generic api
+        for i in 0..r.size {
+
+        }
+        flush_tlb();
+        Err(())
+    }
+
+    fn virt_to_phys(&mut self, address: usize) -> Option<usize>
     {
         let pde_index = address >> 22;
-        if get_base().entries[pde_index] == 0 {
+        if self.entries[pde_index] == 0 {
             return None;
         }
         let offset = address & 0xfff;
@@ -138,16 +176,10 @@ impl memory::mapper::MapperInterface for X86Mapper
         Some(pte + offset)
     }
 
-    fn flush()
-    {
-        unsafe {
-            asm!("push eax",
-            "mov eax, cr3",
-            "mov cr3, eax",
-            "pop eax");
-        }
-    }
 }
+
+// TODO might put this in the assembly
+static mut KERNEL_PT_TEMP : [u32; 1024] = [0; 1024];
 
 pub fn init_post_jump()
 {
@@ -155,24 +187,29 @@ pub fn init_post_jump()
             // We will use the static early page dir at first TODO should we change it ?
             // TODO oh my god do a macro for getting symbols's address I
             // shot myself in the foot multiple times already it hurts so bad
-            PAGING_BASE = RawBox::from_ptr(&EARLY_PAGE_DIRECTORY);
-            let dir: &mut PageDir = PAGING_BASE.deref_mut();
+            MAPPER = RawBox::from_ptr(&EARLY_PAGE_DIRECTORY);
+            let dir: &mut PageDir = MAPPER.deref_mut();
 
             // setting the recursive mapping entry at the last entry of the table
             // We lose 4MB of virtual space, but we gain happiness
             // TODO this is very naky, EPD_PHYS is the load address
             dir.set_entry(0x3ff, &EPD_PHYS as *const PageDir as usize, 3);
 
+
             // remove identity mapping
             dir.set_entry(0, 0, 0);
-            X86Mapper::flush();
-        }
-}
 
-extern "C"
-{
-    fn load_page_directory(page_directory: *const PageDir);
-    fn enable_paging();
+            // Allocating 4MB in high memory to store the kernel page tables
+            assert!(super::KERNEL_PAGE_TABLES_START >> 22 == 0x3fe);
+            let address = mapper::virt_to_phys_kernel(&KERNEL_PT_TEMP as *const u32 as usize).unwrap();
+            dir.set_entry(0x3fe, address, 3);
+            
+            // flush the tlb so we can map in the new table
+            flush_tlb();
+
+            let range = pmm::alloc_contiguous_pages(1024).expect("Cannot allocate page tables memory space");
+            mapper::map_range_kernel(range, super::KERNEL_PAGE_TABLES_START).expect("Cannot map page tables memory space");
+        }
 }
 
 // TODO is this code archiecture specific ?
