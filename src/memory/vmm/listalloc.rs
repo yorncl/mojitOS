@@ -1,10 +1,9 @@
-use core::alloc::GlobalAlloc;
 use core::borrow::{BorrowMut, Borrow};
 use super::{KernelAllocator, AllocError};
 use crate::memory::{pmm, PAGE_SIZE};
 use crate::memory::vmm::mapper;
 use crate::x86::paging::ROUND_PAGE_UP;
-use alloc::alloc::Layout;
+use alloc::alloc::{Layout, GlobalAlloc};
 use core::mem::size_of;
 use crate::{klog, align_up, align_down, is_aligned, kprint};
 use super::Lock;
@@ -61,6 +60,10 @@ impl BlockInfo {
     {
         (self as *const BlockInfo as usize + size_of::<Self>()) as *mut u8
     }
+    #[inline(always)]
+    fn addr(&self) -> usize {
+        self as *const BlockInfo as usize
+    }
 }
 
 impl ListAllocator
@@ -75,22 +78,51 @@ impl ListAllocator
     }
 
     // Release block and insert it in free list, coalesce with neighbours, unmap if last 
-    fn free_block(&mut self, block: &BlockInfo)
+    fn free_block(&mut self, block: &'static mut BlockInfo)
     {
         klog!("Freeing {:?}", self);
-        loop {}
-        // klog!("Freeing block");
-        // let address = block as *const BlockInfo as usize;
 
-        // let mut current = &self.head;
-        // while let Some(n) = current.next {
-        //     let address = n.data() as usize;
-        // }
+        // we will loop throught the nodes to find the neigbhours
+        let head_address = self.head.addr();
+        let mut current = &mut self.head;
+        while !current.next.is_none() {
+            let ca = current.addr();
+            // TODO confused about the ownership situation here
+            let next = current.next.as_mut().unwrap();
+            // this tells us if the block to free is between current and current.next
+            if next.addr() > block.addr() {
+                if ca == head_address {
+                    block.next = current.next.take();
+                    // Goto first block
+                    current.next = Some(block);
+                    current = current.next.as_mut().unwrap();
+                    // TODO coalesce with next ?
+                }
+                else {
+                    current.size += block.size;
+                    // coalesce with next block if touching
+                    if ca + current.size == next.addr() {
+                        current.size += next.size;
+                        current.next = next.next.take(); 
+                    }
+                }
+                // If the last free block is at the heap's end, unmap pages if we can
+                if current.next.is_none() && current.addr() + current.size == self.memstart + self.heapsize {
+                    let start = if is_aligned!(current.addr(), PAGE_SIZE) { current.addr() } else {ROUND_PAGE_UP!(current.addr())};
+                    let npages = current.size / PAGE_SIZE;
+                    let _ = mapper::unmap_range_kernel(start, npages);
+                    current.size -= npages * PAGE_SIZE;
+                }
+                return;
+            }
+            current = current.next.as_mut().unwrap(); // TODO don't really understand this line
+        }
+        panic!("Invalid free pointer");
     }
 
     /// Tries to find an existing free block of sufficient enough size
     /// This function will expand the heap if it doesn't find one
-    fn alloc_block(&mut self, new_size: usize) -> Result<*mut u8, AllocError>
+    fn alloc_block(&mut self, new_size: usize) -> Result<*const BlockInfo, AllocError>
     {
         klog!("fn alloc_block {}B", new_size);
         let mut current = self.head.borrow_mut();
@@ -104,26 +136,23 @@ impl ListAllocator
                 let ret = current.next.take().unwrap();
                 current.next = next;
                 // b.next = None;
-                return Ok(ret as *const BlockInfo as *mut u8);
+                return Ok(ret as *const BlockInfo);
             }
-            // if the requested size is smaller, and the difference can contain a new blockinfo
+            // if the requested size is smaller than available, and the difference can contain a new blockinfo
             else if fbsize > new_size
                 && is_aligned!(b.size - new_size, core::mem::align_of::<BlockInfo>()) {// TODO is this alignment check rational ?
                 unsafe {
-                    let left = BlockInfo { size: b.size - new_size, next: b.next.take()};
-                    let left_ptr = *b as *mut BlockInfo;
+                    let left = BlockInfo {size: b.size - new_size, next: b.next.take()};
+                    // TODO this line makes me sad
+                    let left_ptr = (*b as *mut BlockInfo as *mut u8).offset(b.size.try_into().unwrap());
                     // TODO might crash on large blocks
-                    let _ = left_ptr.offset(b.size.try_into().unwrap());
-                    left_ptr.write(left);
+                    (left_ptr as *mut BlockInfo).write(left);
                     // Downsizing newly allocated block size
                     b.size = new_size;
                     // Getting its address
-                    let ret = *b as *const BlockInfo as *mut u8;
-
+                    let ret = *b as *const BlockInfo;
                     // setting the current next to the leftovers node
-                    current.next = left_ptr.as_mut();
-                    // klog!("{:?}", b.next);
-                    loop{}
+                    current.next = (left_ptr as *mut BlockInfo).as_mut();
                     return Ok(ret);
                 }
             }
@@ -148,13 +177,12 @@ impl ListAllocator
             Err(()) => return Err(AllocError::ENOMEM)
         }
 
-        let newblock = start as *const BlockInfo;
+        let allocated_ptr = start as *const BlockInfo as *mut u8;
         unsafe {
-            let nb = &mut*(newblock as *mut BlockInfo);
             // leftovers from allocating the pages
             // we need to allocate a new free block at the end of our list
             if total - new_size > 0 {
-                let left = &mut *((newblock.offset(new_size.try_into().unwrap())) as *mut BlockInfo);
+                let left = &mut *((allocated_ptr.offset(new_size.try_into().unwrap())) as *mut BlockInfo);
                 *left = BlockInfo {
                     next : None,
                     size : total - new_size
@@ -162,11 +190,12 @@ impl ListAllocator
                 // point last unused block next to leftovers
                 current.next = Some(left);
             }
+            let nb = &mut*(allocated_ptr as *mut BlockInfo);
             nb.size = new_size;
             // The newly allocated block isn't in the free list, no neighbours
             nb.next = None;
         }
-        Ok(newblock as *mut u8)
+        Ok(allocated_ptr as *const BlockInfo)
     }
 
     /// Decrease current heap size by a number of pages
@@ -209,13 +238,19 @@ unsafe impl GlobalAlloc for Lock<ListAllocator>
     unsafe fn alloc(&self, layout: Layout) -> *mut u8
     {
         let alloc = self.get();
+        klog!("======== fn alloc");
+        klog!("++++++ before alloc ");
+        alloc.print_list();
         let (size, align) = ListAllocator::adjust_layout(layout);
         match alloc.alloc_block(size + size_of::<BlockInfo>()) { // TODO better alignment
             // management
             Ok(b) => {
+                klog!("++++++ after alloc ");
                 klog!("{:?}", alloc);
                 alloc.print_list();
-                return b as *const BlockInfo as *mut u8;
+                let address = b as *mut u8 as usize;
+                let ptr = (address + binfo_size!()) as *mut u8;
+                return ptr
             }
             Err(_e) => return core::ptr::null_mut()
         }
@@ -223,10 +258,17 @@ unsafe impl GlobalAlloc for Lock<ListAllocator>
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout)
     {
         let alloc = self.get();
-        // TODO check aligntment 
+        klog!("======== fn dealloc");
+        klog!("++++++ before free ");
+        alloc.print_list();
+        // TODO check aligntment and use layout
         // TODO Add a mechanism to check if the pointer is valid ?
-        let block: &BlockInfo =  &*{(ptr as usize - binfo_size!()) as *const BlockInfo};
+        let block_address = ptr as usize - binfo_size!();
+        let block: &mut BlockInfo =  &mut*(block_address as *mut BlockInfo);
         alloc.free_block(block);
+        klog!("++++++ after free ");
+        klog!("{:?}", alloc);
+        alloc.print_list();
     }
 }
 
@@ -235,10 +277,10 @@ impl fmt::Debug for ListAllocator {
 
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
-        f.debug_struct("ListAllocator")
+        f.debug_struct("ListAlloc")
             .field("memstart", &format_args!("0x{:x}", self.memstart))
             .field("heapsize", &format_args!("{}KB ({}B)", self.heapsize/1024, self.heapsize))
-            .field("heapmax", &self.heapmax)
+            .field("heapmax", &format_args!("0x{:x}",self.heapmax))
             .finish()
     }
 }

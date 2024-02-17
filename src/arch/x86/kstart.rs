@@ -110,8 +110,11 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 
     let vec_test = vec![1;100];
     let vec_test2 = vec![1;100];
+    {
+        let mut s = alloc::string::String::from("Bonjour tout le monde");
+        s.reserve(0);
+    }
     loop{}
-    let s = alloc::string::String::from("Bonjour tout le monde");
 
 
     // // klog!("This is reload_segments's address {:p}", reload_segments as *const());
