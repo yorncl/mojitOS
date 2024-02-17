@@ -1,15 +1,16 @@
 use super::paging;
 use crate::driver::vga;
 use crate::x86::paging::ROUND_PAGE_UP;
-use crate::{klog, MB};
+use crate::{klog};
 use crate::arch::common::multiboot;
 use crate::memory;
 use crate::memory::pmm;
 use crate::memory::pmm::{Frame, FrameRange};
 use crate::memory::vmm;
 use crate::memory::vmm::mapper;
+use super::PAGE_SIZE;
 
-
+use alloc::vec;
 // pub fn get_cpu_mode() -> &'static str {
 //     let mode: u32;
 //     unsafe {
@@ -80,19 +81,38 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     klog!("Start init pmm");
     pmm::init(memory::phys_mem());
     // Blocking out the first 4MB as they will always be mapped
-    pmm::fill_range(FrameRange{start: Frame(0), size: (kend - super::KERNEL_HEAP_START) / super::PAGE_SIZE});
+    pmm::fill_range(FrameRange{start: Frame(0), size: (kend - super::KERNEL_OFFSET) / super::PAGE_SIZE});
     klog!("End init pmm");
 
     paging::init_post_jump();
     klog!("virt to phys : {:?}", mapper::virt_to_phys_kernel(0x1000));
     klog!("virt to phys : {:?}", mapper::virt_to_phys_kernel(0xC0001000));
 
-    // Set the kernel "heap" space for 800MB from 0xC0000000, and mapping the first 10MB contiguous of pages
-    // in that space
-    let memstart = ROUND_PAGE_UP!(kend);
-    vmm::init(memstart, super::KERNEL_HEAP_SIZE, MB!(4)/super::PAGE_SIZE);
+    // range mapping test
+    // let mut a = 0xF0001000;
+    // a += 100;
+    // klog!("0x{a:x} access : {:?}", mapper::virt_to_phys_kernel(a));
+    // a += 0x1000;
+    // klog!("0x{a:x} access : {:?}", mapper::virt_to_phys_kernel(a));
 
+    // a = 0xF0001000;
+    // let range = pmm::alloc_contiguous_pages(2).unwrap();
+    // mapper::map_range_kernel(range, a).expect("Could not test map");
+
+    // a += 100;
+    // klog!("0x{a:x} access : {:?}", mapper::virt_to_phys_kernel(a));
+    // a += 0x1000;
+    // klog!("0x{a:x} access : {:?}", mapper::virt_to_phys_kernel(a));
+
+    // Sets up the virtual memory manager
+    let memstart = ROUND_PAGE_UP!(kend);
+    vmm::init(memstart, super::KERNEL_PAGE_TABLES_START - kend);
+
+    let vec_test = vec![1;100];
+    let vec_test2 = vec![1;100];
     loop{}
+    let s = alloc::string::String::from("Bonjour tout le monde");
+
 
     // // klog!("This is reload_segments's address {:p}", reload_segments as *const());
     // unsafe { asm!("cli"); }

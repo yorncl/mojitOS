@@ -1,19 +1,25 @@
-use crate::{klog, print};
-use core::ops::{Deref, DerefMut};
+use crate::{klog, kprint};
+use core::ops::DerefMut;
 use core::arch::asm;
 use bitflags::bitflags;
-use crate::memory;
 use crate::utils::rawbox::RawBox;
+use super::PAGE_SIZE;
 use crate::memory::pmm;
 use crate::memory::pmm::{Frame, FrameRange};
-use super::PAGE_SIZE;
+use crate::x86::{KERNEL_PAGE_TABLES_START, KERNEL_OFFSET};
 use crate::memory::vmm::mapper;
 
 pub static mut MAPPER : RawBox<PageDir> = RawBox {data: 0 as *mut PageDir};
 
 macro_rules!  ROUND_PAGE_UP{
     ($a:expr) => {
-           ($a + super::PAGE_SIZE) & !(0xfff as usize)
+           ($a + PAGE_SIZE) & !(0xfff as usize)
+    };
+}
+
+macro_rules!  ROUND_PAGE_DOWN{
+    ($a:expr) => {
+           ROUND_PAGE_UP!($a) - PAGE_SIZE
     };
 }
 
@@ -112,7 +118,7 @@ fn flush_tlb()
 #[repr(C, packed)]
 struct PageTable
 {
-        entries: [PTE; 1024]
+        pub entries: [PTE; 1024]
 }
 
 #[inline(always)]
@@ -139,26 +145,65 @@ macro_rules! offset {
     };
 }
 
+macro_rules! is_page_aligned {
+    ($a: expr) => {
+       ($a & (PAGE_SIZE - 1) == 0)
+    };
+}
+
+// TODO the most abhorrent code i've written in my life so far
+fn get_kernel_pt(index: usize) -> *mut PageTable
+{
+    let ptr: *mut PageTable;
+    unsafe {
+        ptr = (KERNEL_PAGE_TABLES_START + index * core::mem::size_of::<PageTable>()) as *mut PageTable;
+    }
+    ptr
+}
+
 impl mapper::MapperInterface for PageDir
 {
 
     fn map_single(&mut self, f: Frame, address: usize) -> Result<(), ()> {
-        
+        if !is_page_aligned!(address) { return Err(()) }
+        let phys_address = f.0 * PAGE_SIZE;
+        let index = pde_index!(address);
+        let pt = unsafe {&mut(*get_kernel_pt(index))};
+        if self.entries[index] == 0 {
+            self.entries[index] = self.virt_to_phys(pt as *const PageTable as usize).unwrap() | 3;
+        }
+        pt.entries[pte_index!(address)] = phys_address | 3;
         flush_tlb();
-        Err(())
+        Ok(())
+    }
+
+    fn unmap_single(&mut self, address: usize) -> Result<(), ()> {
+        let address = self.virt_to_phys(address).expect("Trying to unmap unmapped page");
+        pmm::free_page(Frame(address/PAGE_SIZE));
+        flush_tlb();
+        Ok(())
+    }
+
+    fn unmap_range(&mut self, address: usize, npages: usize) -> Result<(), ()> {
+        let mut ptr = address;
+        for i in 0..npages {
+            self.unmap_single(ptr);
+            ptr += PAGE_SIZE;
+        }
+        Ok(())
     }
 
     fn map_range(&mut self, r: FrameRange, address: usize) -> Result<(), ()> {
+        if !is_page_aligned!(address) { return Err(()) }
         // TODO assert aligned to page 
-
-        let phys_start = r.start.0 * PAGE_SIZE; // TODO more generic api
+        // TODO more generic api
         for i in 0..r.size {
-
+            self.map_single(Frame(r.start.0 + i), address + i * PAGE_SIZE).unwrap();
         }
-        flush_tlb();
-        Err(())
+        Ok(())
     }
 
+    /// Will use the last entry of the page directory for recursive mapping
     fn virt_to_phys(&mut self, address: usize) -> Option<usize>
     {
         let pde_index = address >> 22;
@@ -173,13 +218,14 @@ impl mapper::MapperInterface for PageDir
         unsafe { 
             pte = *(special as *const usize) & !0xfff;
         }
+        if pte == 0 { return None }
         Some(pte + offset)
     }
 
 }
 
 // TODO might put this in the assembly
-static mut KERNEL_PT_TEMP : [u32; 1024] = [0; 1024];
+static mut KERNEL_PT_TEMP : [usize; 1024] = [0; 1024];
 
 pub fn init_post_jump()
 {
@@ -200,15 +246,28 @@ pub fn init_post_jump()
             dir.set_entry(0, 0, 0);
 
             // Allocating 4MB in high memory to store the kernel page tables
-            assert!(super::KERNEL_PAGE_TABLES_START >> 22 == 0x3fe);
-            let address = mapper::virt_to_phys_kernel(&KERNEL_PT_TEMP as *const u32 as usize).unwrap();
+            // We are making sure that the virtual address is well aligned and within the last
+            // index of the directory
+            assert!(pde_index!(KERNEL_PAGE_TABLES_START) == 0x3fe);
+            assert!(is_page_aligned!(KERNEL_PAGE_TABLES_START));
+            let address = mapper::virt_to_phys_kernel(&KERNEL_PT_TEMP as *const usize as usize).expect("Cannot map KERNEL_PT_TMP");
             dir.set_entry(0x3fe, address, 3);
             
             // flush the tlb so we can map in the new table
             flush_tlb();
 
+            // allocating 4MB of pages to store kernel pages TODO might be a bit overkill and
+            // unoptimized
             let range = pmm::alloc_contiguous_pages(1024).expect("Cannot allocate page tables memory space");
-            mapper::map_range_kernel(range, super::KERNEL_PAGE_TABLES_START).expect("Cannot map page tables memory space");
+
+            // Manually map the range, as mapper::map_range_kernel requires the kernel allocator to
+            // be initialized, which itself needs paging (what we are doing right now you dingus)
+            let start = range.start.0;
+            for i in 0..range.size { 
+                KERNEL_PT_TEMP[i] = start + i * PAGE_SIZE | 3; // TODO better flags
+            }
+            // flush the tlb one last time so that the new table is updated
+            flush_tlb();
         }
 }
 
@@ -220,17 +279,17 @@ pub fn page_fault_handler(instruction_pointer: u32, code: u32)
     klog!("PAGE FAULT EXCEPTION");
     unsafe {asm!("mov {0}, cr2", out(reg) address);}
     klog!("Virtual address : {:p}", (address as *const u32));
-    print!("Error code: "); // TODO reformat in the future
+    kprint!("Error code: "); // TODO reformat in the future
     let flags = PF::from_bits(code).unwrap();
-    print!("{} ", if flags.contains(PF::P) {"PAGE_PROTECTION"} else {"PAGE_NOT_PRESENT"});
-    print!("{} ", if flags.contains(PF::W) {"WRITE"} else {"READ"});
-    if flags.contains(PF::U) { print!("CPL_3 ") };
-    if flags.contains(PF::R) { print!("RESERVED_WRITE_BITS ") };
-    if flags.contains(PF::I) { print!("INSTRUCTION_FETCH ") };
-    if flags.contains(PF::PK) { print!("KEY_PROTECTION ") };
-    if flags.contains(PF::SS) { print!("SHADOW STACK ") };
-    if flags.contains(PF::SGX) { print!("SGX_VIOLATION ") };
-    print!("\n");
+    kprint!("{} ", if flags.contains(PF::P) {"PAGE_PROTECTION"} else {"PAGE_NOT_PRESENT"});
+    kprint!("{} ", if flags.contains(PF::W) {"WRITE"} else {"READ"});
+    if flags.contains(PF::U) { kprint!("CPL_3 ") };
+    if flags.contains(PF::R) { kprint!("RESERVED_WRITE_BITS ") };
+    if flags.contains(PF::I) { kprint!("INSTRUCTION_FETCH ") };
+    if flags.contains(PF::PK) { kprint!("KEY_PROTECTION ") };
+    if flags.contains(PF::SS) { kprint!("SHADOW STACK ") };
+    if flags.contains(PF::SGX) { kprint!("SGX_VIOLATION ") };
+    kprint!("\n");
     loop{}
 }
 
