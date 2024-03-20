@@ -10,6 +10,7 @@ use crate::memory::vmm;
 use crate::memory::vmm::mapper;
 use super::PAGE_SIZE;
 
+
 use alloc::vec;
 // pub fn get_cpu_mode() -> &'static str {
 //     let mode: u32;
@@ -45,6 +46,7 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     // early vga logging
     vga::io_init();
     klog!("VGA initialized");
+
 
     let kstart: usize;
     let kend: usize;
@@ -84,37 +86,26 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     pmm::fill_range(FrameRange{start: Frame(0), size: (kend - super::KERNEL_OFFSET) / super::PAGE_SIZE});
     klog!("End init pmm");
 
+    klog!("Setup paging post jump");
     paging::init_post_jump();
-    klog!("virt to phys : {:?}", mapper::virt_to_phys_kernel(0x1000));
-    klog!("virt to phys : {:?}", mapper::virt_to_phys_kernel(0xC0001000));
 
-    // range mapping test
-    // let mut a = 0xF0001000;
-    // a += 100;
-    // klog!("0x{a:x} access : {:?}", mapper::virt_to_phys_kernel(a));
-    // a += 0x1000;
-    // klog!("0x{a:x} access : {:?}", mapper::virt_to_phys_kernel(a));
-
-    // a = 0xF0001000;
-    // let range = pmm::alloc_contiguous_pages(2).unwrap();
-    // mapper::map_range_kernel(range, a).expect("Could not test map");
-
-    // a += 100;
-    // klog!("0x{a:x} access : {:?}", mapper::virt_to_phys_kernel(a));
-    // a += 0x1000;
-    // klog!("0x{a:x} access : {:?}", mapper::virt_to_phys_kernel(a));
-
+    klog!("Setting up the memory manager");
     // Sets up the virtual memory manager
     let memstart = ROUND_PAGE_UP!(kend);
     vmm::init(memstart, super::KERNEL_PAGE_TABLES_START - kend);
 
-    let vec_test = vec![1;100];
-    let vec_test2 = vec![1;100];
+
+    let a = alloc::string::String::from("Moi je suis en pleine forme");
+    let _vec_test = vec![1;100];
     {
-        let mut s = alloc::string::String::from("Bonjour tout le monde");
-        s.reserve(0);
+        let _vec_test2 = vec![1;100];
+        let b = alloc::string::String::from("Bonjour tout le monde");
+        klog!("{}", b);
     }
-    loop{}
+    klog!("{}", a);
+    for i in 0..10 {
+        klog!("{:x}", _vec_test[i]);
+    }
 
 
     // // klog!("This is reload_segments's address {:p}", reload_segments as *const());
@@ -128,5 +119,5 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     // klog!("IDT setup");
     // unsafe { asm!("sti"); }
 
-    // crate::kmain();    
+    crate::kmain();    
 }

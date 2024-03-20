@@ -9,7 +9,7 @@ edition = "2021"
 bitflags = "2.4.1"
 
 [profile.dev]
-panic = "abort"
+# panic = "abort"
 
 [profile.release]
 panic = "abort"

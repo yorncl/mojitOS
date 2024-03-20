@@ -50,6 +50,13 @@ clean:
 run: iso # TODO for some reason using the $(ISO) rule as dependency requires to run this twice for the iso to be rebuilt
 	$(QEMU) -cdrom $(ISO) -no-reboot
 
+klib_test:
+	$(CARGO) test --no-run
+test: klib_test asm link
+	cp mojitos.elf iso/boot/mojitos.elf
+	grub-mkrescue -o $(ISO) iso
+	$(QEMU) -cdrom $(ISO) -no-reboot
+
 run_non_iso: $(NAME) # TODO I think there is a bug in qemu for multiboot
 	$(QEMU) -kernel $(NAME)
 

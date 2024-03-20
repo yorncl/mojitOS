@@ -30,11 +30,14 @@ kernel_bootstrap:
  
   call setup_early_paging
 
+  push eax
   lea eax, [higher_half]
   jmp eax
 
   higher_half:
   add esp, HIGH_MAPPING_START
+  add ebp, HIGH_MAPPING_START
+  pop eax
 
 
   push ebx ; multiboot info structure pointer

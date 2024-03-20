@@ -4,6 +4,7 @@ use crate::x86::paging::kernel_mapper;
 
 // TODO error enum ?
 
+#[allow(dead_code)] // TODO
 pub trait MapperInterface
 {
     /// Map a single frame

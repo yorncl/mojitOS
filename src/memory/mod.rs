@@ -74,7 +74,7 @@ pub const PAGE_SIZE : usize = crate::arch::PAGE_SIZE;
 
 /// Static structure to hold information about memroy regions
 static mut PHYS_MEM : PhysicalMemory = PhysicalMemory{
-    regions:[PhysicalRegion {start : 0, size: 0, rtype: RegionType::Unknown}; 10],
+    regions:[PhysicalRegion {start : 0, size: 0, rtype: RegionType::Unknown}; MAX_PHYS_REGIONS],
     size: 0
 };
 

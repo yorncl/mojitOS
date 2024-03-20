@@ -38,7 +38,6 @@ struct BlockInfo {
 }
 
 impl fmt::Debug for BlockInfo {
-
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
         f.debug_struct("PhysicalRegion")
@@ -80,8 +79,6 @@ impl ListAllocator
     // Release block and insert it in free list, coalesce with neighbours, unmap if last 
     fn free_block(&mut self, block: &'static mut BlockInfo)
     {
-        klog!("Freeing {:?}", self);
-
         // we will loop throught the nodes to find the neigbhours
         let head_address = self.head.addr();
         let mut current = &mut self.head;
@@ -89,6 +86,7 @@ impl ListAllocator
             let ca = current.addr();
             // TODO confused about the ownership situation here
             let next = current.next.as_mut().unwrap();
+            // let next = current.next.unwrap();
             // this tells us if the block to free is between current and current.next
             if next.addr() > block.addr() {
                 if ca == head_address {
@@ -124,7 +122,6 @@ impl ListAllocator
     /// This function will expand the heap if it doesn't find one
     fn alloc_block(&mut self, new_size: usize) -> Result<*const BlockInfo, AllocError>
     {
-        klog!("fn alloc_block {}B", new_size);
         let mut current = self.head.borrow_mut();
         // Loop through existing free blocks to find match
         while let Some(ref mut b) = current.next { // TODO how is b type legal
@@ -238,16 +235,11 @@ unsafe impl GlobalAlloc for Lock<ListAllocator>
     unsafe fn alloc(&self, layout: Layout) -> *mut u8
     {
         let alloc = self.get();
-        klog!("======== fn alloc");
-        klog!("++++++ before alloc ");
         alloc.print_list();
         let (size, align) = ListAllocator::adjust_layout(layout);
         match alloc.alloc_block(size + size_of::<BlockInfo>()) { // TODO better alignment
             // management
             Ok(b) => {
-                klog!("++++++ after alloc ");
-                klog!("{:?}", alloc);
-                alloc.print_list();
                 let address = b as *mut u8 as usize;
                 let ptr = (address + binfo_size!()) as *mut u8;
                 return ptr
@@ -258,17 +250,12 @@ unsafe impl GlobalAlloc for Lock<ListAllocator>
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout)
     {
         let alloc = self.get();
-        klog!("======== fn dealloc");
-        klog!("++++++ before free ");
         alloc.print_list();
         // TODO check aligntment and use layout
         // TODO Add a mechanism to check if the pointer is valid ?
         let block_address = ptr as usize - binfo_size!();
         let block: &mut BlockInfo =  &mut*(block_address as *mut BlockInfo);
         alloc.free_block(block);
-        klog!("++++++ after free ");
-        klog!("{:?}", alloc);
-        alloc.print_list();
     }
 }
 
