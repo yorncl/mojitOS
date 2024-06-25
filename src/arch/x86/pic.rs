@@ -33,12 +33,6 @@ enum ICW4 {
     SFNM = 0x10,        // Special fully nested (not)
 }
 
-
-// fn ack_irq()
-// {
-//     asm!();
-// }
-
 fn pic_remap(offset1: i8, offset2: i8)
 {
     // save masks
@@ -70,9 +64,18 @@ fn pic_remap(offset1: i8, offset2: i8)
     io::outb(PicPort::MasterData as u16, 0xFD); // TODO this "as u16" is ugly, can we find a
                                                        // better way
     io::outb(PicPort::SlaveData as u16, slave_mask);
+    io::wait();
 }
 
 pub fn setup()
 {
     pic_remap(0x20 as i8, 0x28 as i8); // the first 32 interrupts are reserved for the CPU exceptions
+}
+
+pub fn disable() {
+    setup();
+    io::outb(PicPort::MasterData as u16, 0xFF);
+    io::outb(PicPort::SlaveData as u16, 0xFF);
+    // TODO is all that waiting necessary ?
+    io::wait();
 }

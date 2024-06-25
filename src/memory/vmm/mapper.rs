@@ -16,7 +16,7 @@ pub trait MapperInterface
     /// Unmap contiguous frame
     fn unmap_range(&mut self, address: usize, npages: usize) -> Result<(), ()>;
     /// Return the physical address of a virtual and mapped address
-    fn virt_to_phys(&mut self, address: usize) -> Option<usize>;
+    fn virt_to_phys(&self, address: usize) -> Option<usize>;
 }
 
 /// Map a single frame

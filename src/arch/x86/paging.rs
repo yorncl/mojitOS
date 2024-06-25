@@ -204,7 +204,7 @@ impl mapper::MapperInterface for PageDir
     }
 
     /// Will use the last entry of the page directory for recursive mapping
-    fn virt_to_phys(&mut self, address: usize) -> Option<usize>
+    fn virt_to_phys(&self, address: usize) -> Option<usize>
     {
         let pde_index = address >> 22;
         if self.entries[pde_index] == 0 {

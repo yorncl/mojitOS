@@ -25,6 +25,7 @@ pub fn inb(port: u16) -> u8
     byte
 }
 
+// TODO wtf ? I don't remember why I did that
 pub fn wait()
 {
     unsafe {

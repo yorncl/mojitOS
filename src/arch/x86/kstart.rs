@@ -11,6 +11,12 @@ use crate::memory::vmm::mapper;
 use super::PAGE_SIZE;
 
 
+use super::cpuid;
+use super::apic;
+use super::pic;
+use super::acpi;
+
+
 use alloc::vec;
 // pub fn get_cpu_mode() -> &'static str {
 //     let mode: u32;
@@ -47,6 +53,15 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     vga::io_init();
     klog!("VGA initialized");
 
+    // Cpu features requirements
+    cpuid::init();
+    klog!("CPU vendor: {}", cpuid::vendor());
+    if !cpuid::check_local_apic() {
+        panic!("APIC needed!")
+    }
+    if !cpuid::check_rdmsr() {
+        panic!("RDMSR disabled!")
+    }
 
     let kstart: usize;
     let kend: usize;
@@ -107,14 +122,19 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
         klog!("{:x}", _vec_test[i]);
     }
 
+    klog!("Setup ACPI");
+    acpi::init();
+    klog!("Disabling PIC");
+    pic::disable();
+    klog!("Setup APIC");
+    apic::init();
+
 
     // // klog!("This is reload_segments's address {:p}", reload_segments as *const());
     // unsafe { asm!("cli"); }
     // klog!("CPU mode: {}", get_cpu_mode());
     // gdt::load();
     // klog!("GDT loaded");
-    // pic::setup(); // TODO error handling in rust 
-    // klog!("PIC setup");
     // idt::setup();
     // klog!("IDT setup");
     // unsafe { asm!("sti"); }

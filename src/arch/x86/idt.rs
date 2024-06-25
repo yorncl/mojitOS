@@ -81,6 +81,7 @@ fn set_interrupt(i: usize, handler: unsafe extern fn (u32) -> (), selector: u16,
     }
 }
 
+// TODO spurious vector interrupts
 fn setup_handlers()
 {
     for i in 0..0x20 {

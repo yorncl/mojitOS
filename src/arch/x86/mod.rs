@@ -3,6 +3,10 @@ pub mod pic;
 pub mod io;
 pub mod idt;
 pub mod paging;
+pub mod cpuid;
+mod util;
+mod apic;
+mod acpi;
 pub mod kstart;
 
 use crate::MB;
