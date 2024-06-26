@@ -1,13 +1,12 @@
 use super::paging;
 use crate::driver::vga;
 use crate::x86::paging::ROUND_PAGE_UP;
-use crate::{klog};
+use crate::klog;
 use crate::arch::common::multiboot;
 use crate::memory;
 use crate::memory::pmm;
 use crate::memory::pmm::{Frame, FrameRange};
 use crate::memory::vmm;
-use crate::memory::vmm::mapper;
 use super::PAGE_SIZE;
 
 
@@ -17,7 +16,6 @@ use super::pic;
 use super::acpi;
 
 
-use alloc::vec;
 // pub fn get_cpu_mode() -> &'static str {
 //     let mode: u32;
 //     unsafe {
@@ -97,7 +95,7 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     // This will filter out unusable pages
     klog!("Start init pmm");
     pmm::init(memory::phys_mem());
-    // Blocking out the first 4MB as they will always be mapped
+    // Blocking out the first 4MB as they are already mapped and always will be
     pmm::fill_range(FrameRange{start: Frame(0), size: (kend - super::KERNEL_OFFSET) / super::PAGE_SIZE});
     klog!("End init pmm");
 
@@ -110,20 +108,20 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     vmm::init(memstart, super::KERNEL_PAGE_TABLES_START - kend);
 
 
-    let a = alloc::string::String::from("Moi je suis en pleine forme");
-    let _vec_test = vec![1;100];
-    {
-        let _vec_test2 = vec![1;100];
-        let b = alloc::string::String::from("Bonjour tout le monde");
-        klog!("{}", b);
-    }
-    klog!("{}", a);
-    for i in 0..10 {
-        klog!("{:x}", _vec_test[i]);
-    }
+    // let a = alloc::string::String::from("Moi je suis en pleine forme");
+    // let _vec_test = vec![1;100];
+    // {
+    //     let _vec_test2 = vec![1;100];
+    //     let b = alloc::string::String::from("Bonjour tout le monde");
+    //     klog!("{}", b);
+    // }
+    // klog!("{}", a);
+    // for i in 0..10 {
+    //     klog!("{:x}", _vec_test[i]);
+    // }
 
     klog!("Setup ACPI");
-    acpi::init();
+    acpi::init().unwrap();
     klog!("Disabling PIC");
     pic::disable();
     klog!("Setup APIC");

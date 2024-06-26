@@ -1,11 +1,12 @@
 // use crate::VGA_INSTANCE;
 // use core::fmt::Write;
+use core::ptr::addr_of;
 use crate::klog;
 
 
 // TODO refacor using bitflags ?
 #[allow(dead_code)]
-pub mod AF // aligned for 4kb
+pub mod af // aligned for 4kb
 {
     pub const A : u8 = 1 << 0;
     pub const RW : u8 = 1 << 1;
@@ -19,7 +20,7 @@ pub mod AF // aligned for 4kb
 }
 
 #[allow(dead_code)]
-pub mod F
+pub mod f
 {
     pub const L : u8 = 1 << 1;
     pub const DB : u8 = 1 << 2;
@@ -84,25 +85,25 @@ pub fn load()
         GDT[0] = format_entry(0, 0, 0, 0);
         // kernel code
         GDT[1] = format_entry(0, 0xffffffff,
-                                AF::P | AF::S | AF::E | AF::RW,
-                                F::DB | F::G);
+                                af::P | af::S | af::E | af::RW,
+                                f::DB | f::G);
         // kernel data
         GDT[2] = format_entry(0, 0xffffffff,
-                                AF::P | AF::S | AF::RW,
-                                F::DB | F::G);
+                                af::P | af::S | af::RW,
+                                f::DB | f::G);
         // user code TODO change permissions
         GDT[1] = format_entry(0, 0xffffffff,
-                                AF::P | AF::S | AF::E | AF::RW,
-                                F::DB | F::G);
+                                af::P | af::S | af::E | af::RW,
+                                f::DB | f::G);
         // user data  TODO change permissions
         GDT[2] = format_entry(0, 0xffffffff,
-                                AF::P | AF::S | AF::RW,
-                                F::DB | F::G);
+                                af::P | af::S | af::RW,
+                                f::DB | f::G);
         GDTR.size = 8 * NENTRIES as u16 - 1;
-        GDTR.offset = &GDT as *const _ as u32;
+        GDTR.offset = GDT.as_ptr() as *const _ as u32;
 
-        klog!("GDT poitner : {:x}", &GDT as *const _ as u32);
-        klog!("GDTR poitner : {:x}", &GDTR as *const _ as u32);
+        klog!("GDT poitner : {:x}", GDT.as_ptr() as *const _ as u32);
+        klog!("GDTR poitner : {:x}", addr_of!(GDTR) as *const _ as u32);
         klog!("GDT size : {}", { GDTR.size });
         klog!("GDT offset : {:x}", { GDTR.offset });
         // load_gdt(&GDTR);

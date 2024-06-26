@@ -1,4 +1,4 @@
-use crate::{arch, klog};
+use crate::arch;
 use crate::memory::pmm::{PageManager, Frame, FrameRange};
 use core::fmt;
 
@@ -100,6 +100,14 @@ impl PageManager for BitMap {
     fn fill_range(&mut self, r: FrameRange) {
         for i in r.start.0..r.start.0 + r.size {
             set!(self, i);
+        }
+    }
+
+    // TODO should the caller check if the address is aligned ?
+    fn get_phys_frames(&self, phys_addres: usize, n: usize) -> FrameRange {
+        FrameRange {
+            start: Frame((phys_addres & !(arch::PAGE_SIZE - 1)) / arch::PAGE_SIZE),
+            size: n
         }
     }
 }

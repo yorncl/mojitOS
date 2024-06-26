@@ -1,6 +1,7 @@
 use core::arch::asm;
 use crate::klog;
 use super::paging::page_fault_handler;
+use core::ptr::addr_of;
 
 #[repr(C)]
 #[repr(packed)]
@@ -42,7 +43,7 @@ pub extern "C" fn generic_handler(interrupt_code: u32)
 }
 
 #[no_mangle]
-pub fn exception_handler(code:u32)
+pub fn exception_handler(_code:u32)
 {
     klog!("CPU Exception !!!!!");
     loop{}
@@ -98,13 +99,13 @@ pub fn setup()
     unsafe {
         setup_handlers();
         IDTR.size = (IDT.len() * core::mem::size_of::<IdtEntry>() - 1) as u16; // TODO why remove 1
-        IDTR.offset = &IDT as *const _ as u32;
+        IDTR.offset = addr_of!(IDT) as *const _ as u32;
 
         asm!(
             "lidt [{0}]",
-            in(reg) &IDTR,
+            in(reg) addr_of!(IDTR),
             options(nostack, preserves_flags)
         );
-        klog!("IDT pointer : {:x}, size : {:x}", &IDTR as *const _ as u32, IDT.len() * core::mem::size_of::<IdtEntry>() - 1);
+        klog!("IDT pointer : {:x}, size : {:x}", addr_of!(IDTR) as *const _ as u32, IDT.len() * core::mem::size_of::<IdtEntry>() - 1);
     }
 }

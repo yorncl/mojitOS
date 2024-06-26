@@ -2,6 +2,7 @@ use crate::memory::pmm::{Frame, FrameRange};
 use crate::x86::paging::kernel_mapper;
 
 
+
 // TODO error enum ?
 
 #[allow(dead_code)] // TODO
@@ -21,6 +22,7 @@ pub trait MapperInterface
 
 /// Map a single frame
 #[inline(always)]
+#[allow(dead_code)]
 pub fn map_single_kernel(f: Frame, address: usize) -> Result<(), ()> {
     kernel_mapper().map_single(f, address)
 }
@@ -38,6 +40,7 @@ pub fn virt_to_phys_kernel(address: usize) -> Option<usize> {
 }
 
 /// Unmap a single frame
+#[allow(dead_code)]
 #[inline(always)]
 pub fn unmap_single_kernel(address: usize) -> Result<(), ()> {
     kernel_mapper().unmap_single(address)

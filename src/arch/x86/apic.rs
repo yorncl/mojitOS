@@ -2,11 +2,10 @@ use crate::KERNEL_OFFSET;
 use crate::klog;
 use super::util;
 
-use super::paging;
-
 static mut APIC_BASE: usize = 0;
 
 #[repr(usize)]
+#[allow(dead_code)]
 enum RegId {
     Spurious = 0xf0, // interrupts which have no source
     Eoi = 0xb0,
@@ -35,11 +34,10 @@ pub fn init() {
 
 
         // Setting the last entry in IDT for the spurious interrupt
-        let mut r = read_register(RegId::TimerLvt) | 0xff;
+        r = read_register(RegId::TimerLvt) | 0xff;
         write_register(RegId::Spurious, r);
 
     }
     
-    loop{}
     klog!("APIC init end");
 }

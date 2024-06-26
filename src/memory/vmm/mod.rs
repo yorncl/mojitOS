@@ -17,6 +17,8 @@ struct Lock<T> {
    obj: Option<UnsafeCell<T>>
 }
 
+
+#[allow(dead_code)]
 impl<T> Lock<T> { // TODO actual locking
 
     fn new(obj: T) -> Self {

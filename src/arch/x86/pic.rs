@@ -36,7 +36,7 @@ enum ICW4 {
 fn pic_remap(offset1: i8, offset2: i8)
 {
     // save masks
-    let master_mask = io::inb(PicPort::MasterData as u16);
+    // let master_mask = io::inb(PicPort::MasterData as u16);
     let slave_mask = io::inb(PicPort::SlaveData as u16);
 
     io::outb(PicPort::MasterCommand as u16, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC reset

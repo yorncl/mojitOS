@@ -2,6 +2,7 @@ pub mod pmm;
 pub mod vmm;
 
 use core::fmt;
+use core::ptr::addr_of_mut;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RegionType
@@ -81,6 +82,6 @@ static mut PHYS_MEM : PhysicalMemory = PhysicalMemory{
 #[inline(always)]
 pub fn phys_mem() -> &'static mut PhysicalMemory
 {
-    unsafe { &mut PHYS_MEM }
+    unsafe { &mut*addr_of_mut!(PHYS_MEM) }
 }
 

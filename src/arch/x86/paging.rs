@@ -6,17 +6,19 @@ use crate::utils::rawbox::RawBox;
 use super::PAGE_SIZE;
 use crate::memory::pmm;
 use crate::memory::pmm::{Frame, FrameRange};
-use crate::x86::{KERNEL_PAGE_TABLES_START, KERNEL_OFFSET};
+use crate::x86::KERNEL_PAGE_TABLES_START;
 use crate::memory::vmm::mapper;
 
 pub static mut MAPPER : RawBox<PageDir> = RawBox {data: 0 as *mut PageDir};
 
+#[macro_export]
 macro_rules!  ROUND_PAGE_UP{
     ($a:expr) => {
            ($a + PAGE_SIZE) & !(0xfff as usize)
     };
 }
 
+#[macro_export]
 macro_rules!  ROUND_PAGE_DOWN{
     ($a:expr) => {
            ROUND_PAGE_UP!($a) - PAGE_SIZE
@@ -129,21 +131,21 @@ pub fn kernel_mapper() -> &'static mut PageDir
 
 macro_rules! pde_index {
     ($a: expr) => {
-       $a >> 22
+        ($a >> 22)
     };
 }
 
 macro_rules! pte_index {
     ($a: expr) => {
-       $a >> 12 & (2 << 10 - 1)
+        ($a >> 12) & ((1 << 10) - 1)
     };
 }
 
-macro_rules! offset {
-    ($a: expr) => {
-       $a & (2 << 12 - 1)
-    };
-}
+// macro_rules! offset {
+//     ($a: expr) => {
+//        $a & ((1 << 12) - 1)
+//     };
+// }
 
 macro_rules! is_page_aligned {
     ($a: expr) => {
@@ -155,9 +157,7 @@ macro_rules! is_page_aligned {
 fn get_kernel_pt(index: usize) -> *mut PageTable
 {
     let ptr: *mut PageTable;
-    unsafe {
-        ptr = (KERNEL_PAGE_TABLES_START + index * core::mem::size_of::<PageTable>()) as *mut PageTable;
-    }
+    ptr = (KERNEL_PAGE_TABLES_START + index * core::mem::size_of::<PageTable>()) as *mut PageTable;
     ptr
 }
 
@@ -186,8 +186,8 @@ impl mapper::MapperInterface for PageDir
 
     fn unmap_range(&mut self, address: usize, npages: usize) -> Result<(), ()> {
         let mut ptr = address;
-        for i in 0..npages {
-            self.unmap_single(ptr);
+        for _ in 0..npages {
+            self.unmap_single(ptr).unwrap();
             ptr += PAGE_SIZE;
         }
         Ok(())
@@ -250,7 +250,7 @@ pub fn init_post_jump()
             // index of the directory
             assert!(pde_index!(KERNEL_PAGE_TABLES_START) == 0x3fe);
             assert!(is_page_aligned!(KERNEL_PAGE_TABLES_START));
-            let address = mapper::virt_to_phys_kernel(&KERNEL_PT_TEMP as *const usize as usize).expect("Cannot map KERNEL_PT_TMP");
+            let address = mapper::virt_to_phys_kernel(KERNEL_PT_TEMP.as_ptr() as *const usize as usize).expect("Cannot map KERNEL_PT_TMP");
             dir.set_entry(0x3fe, address, 3);
             
             // flush the tlb so we can map in the new table
@@ -272,7 +272,7 @@ pub fn init_post_jump()
 }
 
 // TODO is this code archiecture specific ?
-pub fn page_fault_handler(instruction_pointer: u32, code: u32)
+pub fn page_fault_handler(_instruction_pointer: u32, code: u32)
 {
 
     let address : u32;

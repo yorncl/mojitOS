@@ -2,7 +2,7 @@ mod bitmap;
 
 use bitmap::BitMap;
 use core::fmt;
-use crate::memory::{PhysicalMemory, RegionType, PAGE_SIZE, phys_mem};
+use crate::memory::{PhysicalMemory, RegionType, PAGE_SIZE};
 use crate::klog;
 
 /// Abstract representation of Frame
@@ -32,12 +32,15 @@ static mut PMM: BitMap = BitMap::default_const();
 /// Every physical memory manager should implement this trait
 /// We expose a safe api below directly under the crate::pmm namespace
 /// That way we don't have to make the PMM instance public, it is cleaner
+
+#[allow(dead_code)]
 pub trait PageManager {
     fn alloc_page(&mut self) -> Option<Frame>;
     fn alloc_contiguous_pages(&mut self, n: usize) -> Option<FrameRange>;
     fn free_page(&mut self, f: Frame);
     fn free_contiguous_pages(&mut self, r: FrameRange);
     fn fill_range(&mut self, r: FrameRange) -> ();
+    fn get_phys_frames(&self, phys_addres: usize, n: usize) -> FrameRange;
 }
 
 /// Initialize
@@ -57,6 +60,8 @@ pub fn init(memmap: &PhysicalMemory)
 
 /// Allocate a single physical page
 #[inline(always)]
+// TODO remove dead code later
+#[allow(dead_code)]
 pub fn alloc_page() -> Option<Frame>
 {   
     unsafe {PMM.alloc_page()}
@@ -85,4 +90,9 @@ pub fn free_contiguous_pages(f: FrameRange)
 pub fn fill_range(f: FrameRange) -> ()
 {
     unsafe {PMM.fill_range(f)}
+}
+
+#[inline(always)]
+pub fn get_phys_frames(phys_addres: usize, n: usize) -> FrameRange {
+    unsafe {PMM.get_phys_frames(phys_addres, n)}
 }

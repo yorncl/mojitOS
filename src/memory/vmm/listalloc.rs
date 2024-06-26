@@ -1,11 +1,11 @@
-use core::borrow::{BorrowMut, Borrow};
+use core::borrow::BorrowMut;
 use super::{KernelAllocator, AllocError};
 use crate::memory::{pmm, PAGE_SIZE};
 use crate::memory::vmm::mapper;
 use crate::x86::paging::ROUND_PAGE_UP;
 use alloc::alloc::{Layout, GlobalAlloc};
 use core::mem::size_of;
-use crate::{klog, align_up, align_down, is_aligned, kprint};
+use crate::{is_aligned, kprint};
 use super::Lock;
 use core::fmt;
 
@@ -53,6 +53,7 @@ macro_rules! binfo_size{
     };
 }
 
+#[allow(dead_code)]
 impl BlockInfo {
     #[inline(always)]
     pub fn data(&self) -> *mut u8
@@ -65,6 +66,7 @@ impl BlockInfo {
     }
 }
 
+#[allow(dead_code)]
 impl ListAllocator
 {
     pub fn default() -> Self {
@@ -236,7 +238,7 @@ unsafe impl GlobalAlloc for Lock<ListAllocator>
     {
         let alloc = self.get();
         alloc.print_list();
-        let (size, align) = ListAllocator::adjust_layout(layout);
+        let (size, _align) = ListAllocator::adjust_layout(layout);
         match alloc.alloc_block(size + size_of::<BlockInfo>()) { // TODO better alignment
             // management
             Ok(b) => {
@@ -247,7 +249,7 @@ unsafe impl GlobalAlloc for Lock<ListAllocator>
             Err(_e) => return core::ptr::null_mut()
         }
     }
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout)
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout)
     {
         let alloc = self.get();
         alloc.print_list();

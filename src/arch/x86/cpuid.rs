@@ -1,5 +1,4 @@
 use core::arch::asm;
-use crate::klog;
 
 extern "C" {
     fn cpuid_supported() -> u32;

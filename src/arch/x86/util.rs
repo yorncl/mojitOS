@@ -1,5 +1,4 @@
 use core::arch::asm;
-use crate::klog;
 
 
 #[allow(dead_code)]

@@ -294,8 +294,8 @@ fn parse_memory_map(info : &MultibootInfo)
   
   // Used to check if memory is contiguous
   // TODO handle non contiguous memory
-  let mut next_start: usize = 0;
-  for i in 0..nentries
+  // let mut next_start: usize = 0;
+  for _ in 0..nentries
   {
       unsafe {
         let entry = ptr.read_unaligned();
