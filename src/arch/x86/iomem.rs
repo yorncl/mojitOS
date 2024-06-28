@@ -32,16 +32,20 @@ pub fn remap_phys(phys_addr: usize, size: usize) -> Result<usize, &'static str> 
     let phys_start = ROUND_PAGE_DOWN!(phys_addr);
     let phys_end = ROUND_PAGE_UP!(phys_addr + size);
     let nframes = (phys_end - phys_start) / PAGE_SIZE;
+    klog!("phys_start: {:x}", phys_start);
 
     unsafe {
         match IOMM.allocate(nframes) {
             Ok(vptr) => {
                 let range = pmm::get_phys_frames(phys_start, nframes);
+                klog!("AFTER PHYS RANGE phys_start: {:x}", range.start.0 * PAGE_SIZE);
+
                 // TODO Extremely bad error management
                 // might have to redo the whole system more cleanly soon
                 mapper::map_range_kernel(range, vptr).unwrap();
                 // adding the offset so that we get the address we needed for the structure
                 let offset = phys_addr - phys_start;
+                klog!("vptr: {:x}", vptr);
                 klog!("offset: {}", offset);
                 return Ok(vptr + offset);
             },

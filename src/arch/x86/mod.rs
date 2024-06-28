@@ -21,11 +21,11 @@ pub const KERNEL_OFFSET : usize = 0xC0000000;
 
 /// Start of the 4MB block for page tables
 /// Last 4 MB of virtual space TODO I don't know where to put it
-pub const KERNEL_PAGE_TABLES_START : usize = 0xff800000;
+pub const KERNEL_PAGE_TABLES_START : usize = 0xff400000;
 /// Size of page table block
 pub const KERNEL_PAGE_TABLES_SIZE : usize = MB!(4);
 
-pub const KERNEL_IOMM_START : usize = 0xffc00000;
+pub const KERNEL_IOMM_START : usize = 0xff800000;
 pub const KERNEL_IOMM_SIZE : usize = MB!(1);
 
 
@@ -42,16 +42,17 @@ Userspace
 
 Kernel Main memory
 
-------------------- 0x
+------------------- 0xff400000
 
 Kernel page tables (4MB)
 
 ------------------- 0xff800000
-
 IO remap area (1MB)
 
 ------------------- 0xffc00000
-Unusu
+
+The last 4MB are reserved in the Page Directory to achieve recursive mapping
+
 ------------------- 0xffffffff
 
 */

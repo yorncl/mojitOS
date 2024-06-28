@@ -141,11 +141,11 @@ macro_rules! pte_index {
     };
 }
 
-// macro_rules! offset {
-//     ($a: expr) => {
-//        $a & ((1 << 12) - 1)
-//     };
-// }
+macro_rules! offset {
+    ($a: expr) => {
+        ($a & ((1 << 12) - 1))
+    };
+}
 
 macro_rules! is_page_aligned {
     ($a: expr) => {
@@ -161,18 +161,20 @@ fn get_kernel_pt(index: usize) -> *mut PageTable
     ptr
 }
 
+
 impl mapper::MapperInterface for PageDir
 {
 
     fn map_single(&mut self, f: Frame, address: usize) -> Result<(), ()> {
         if !is_page_aligned!(address) { return Err(()) }
         let phys_address = f.0 * PAGE_SIZE;
-        let index = pde_index!(address);
-        let pt = unsafe {&mut(*get_kernel_pt(index))};
-        if self.entries[index] == 0 {
-            self.entries[index] = self.virt_to_phys(pt as *const PageTable as usize).unwrap() | 3;
+        let pde_index = pde_index!(address);
+        let pt = unsafe {&mut(*get_kernel_pt(pde_index))};
+        if self.entries[pde_index] == 0 {
+            self.entries[pde_index] = self.virt_to_phys(pt as *const PageTable as usize).unwrap() | 3;
         }
         pt.entries[pte_index!(address)] = phys_address | 3;
+
         flush_tlb();
         Ok(())
     }
@@ -206,19 +208,29 @@ impl mapper::MapperInterface for PageDir
     /// Will use the last entry of the page directory for recursive mapping
     fn virt_to_phys(&self, address: usize) -> Option<usize>
     {
-        let pde_index = address >> 22;
+        // Index in PD
+        let pde_index = pde_index!(address);
+        // Check if this entry is mapped, else we stop
         if self.entries[pde_index] == 0 {
             return None;
         }
-        let offset = address & 0xfff;
-        let pte_offset = ((address >> 12) & 0x3ff) * core::mem::size_of::<u32>(); // TODO refactor types
+        let pte_offset = pte_index!(address) * core::mem::size_of::<PTE>();
+        let offset = offset!(address);
 
+        // Here we exploit our recursive mapping
+        // 0x3ff - the last entry of the PD
+        // pde_index << 12 - will act as the PT index
+        // pte_offsett - will be the offset to the entry that matter in the accessed Page Table
         let special = (0x3ff << 22) | pde_index << 12 | pte_offset;
         let pte : usize;
         unsafe { 
+            // We access that location which corresponds to the PT entry , and discard the lowest 12 flag bits
             pte = *(special as *const usize) & !0xfff;
         }
-        if pte == 0 { return None }
+        // if the entry is to 0, then it is not mapped
+        if pte == 0 {
+            return None
+        }
         Some(pte + offset)
     }
 
@@ -226,6 +238,7 @@ impl mapper::MapperInterface for PageDir
 
 // TODO might put this in the assembly
 static mut KERNEL_PT_TEMP : [usize; 1024] = [0; 1024];
+
 
 pub fn init_post_jump()
 {
@@ -248,10 +261,10 @@ pub fn init_post_jump()
             // Allocating 4MB in high memory to store the kernel page tables
             // We are making sure that the virtual address is well aligned and within the last
             // index of the directory
-            assert!(pde_index!(KERNEL_PAGE_TABLES_START) == 0x3fe);
+            assert!(pde_index!(KERNEL_PAGE_TABLES_START) == 0x3fd);
             assert!(is_page_aligned!(KERNEL_PAGE_TABLES_START));
             let address = mapper::virt_to_phys_kernel(KERNEL_PT_TEMP.as_ptr() as *const usize as usize).expect("Cannot map KERNEL_PT_TMP");
-            dir.set_entry(0x3fe, address, 3);
+            dir.set_entry(pde_index!(KERNEL_PAGE_TABLES_START), address, 3);
             
             // flush the tlb so we can map in the new table
             flush_tlb();

@@ -125,7 +125,6 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     klog!("Disabling PIC");
     pic::disable();
     klog!("Setup APIC");
-    apic::init();
 
 
     // // klog!("This is reload_segments's address {:p}", reload_segments as *const());

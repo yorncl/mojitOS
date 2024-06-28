@@ -1,9 +1,11 @@
 use crate::KERNEL_OFFSET;
 use crate::klog;
-use super::util;
+use super::util as util;
+
+use super::acpi::ACPISDTHeader;
+
 
 static mut APIC_BASE: usize = 0;
-
 #[repr(usize)]
 #[allow(dead_code)]
 enum RegId {
@@ -20,24 +22,38 @@ fn write_register(offset: RegId, value: u32) {
     unsafe {*((APIC_BASE + offset as usize) as *mut u32) = value}
 }
 
-pub fn init() {
-    klog!("APIC init start");
-    let msr = util::readmsr(util::msrid::LOCAL_APIC_BASE);
 
-    // TODO beurk ajouter le KERNEL OFFSET me rend malade
-    unsafe {
-        APIC_BASE = (msr as usize >> 12) + KERNEL_OFFSET;
-
-        // Setting the last entry in IDT for the spurious interrupts
-        let mut r = read_register(RegId::Spurious) | 0xff;
-        write_register(RegId::Spurious, r);
-
-
-        // Setting the last entry in IDT for the spurious interrupt
-        r = read_register(RegId::TimerLvt) | 0xff;
-        write_register(RegId::Spurious, r);
-
-    }
-    
-    klog!("APIC init end");
+struct Apic {
 }
+
+
+impl Apic {
+}
+
+// Parse the MADT table
+// Find the IO APIC address
+pub fn parse_madt(address: *const ACPISDTHeader) {
+    klog!("APIC init start with addres {:p}", address);
+    // let msr = util::readmsr(util::msrid::LOCAL_APIC_BASE);
+
+    // // TODO beurk ajouter le KERNEL OFFSET me rend malade
+    // unsafe {
+    //     APIC_BASE = (msr as usize >> 12) + KERNEL_OFFSET;
+
+    //     // Setting the last entry in IDT for the spurious interrupts
+    //     let mut r = read_register(RegId::Spurious) | 0xff;
+    //     write_register(RegId::Spurious, r);
+
+
+    //     // Setting the last entry in IDT for the spurious interrupt
+    //     r = read_register(RegId::TimerLvt) | 0xff;
+    //     write_register(RegId::Spurious, r);
+
+    // }
+    
+    // klog!("APIC init end");
+}
+
+
+
+
