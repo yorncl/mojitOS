@@ -5,6 +5,8 @@
 #![feature(custom_test_frameworks)]
 #![test_runner(crate::test_runner)]
 
+#![feature(core_intrinsics)]
+
 use core::panic::PanicInfo;
 extern crate alloc;
 

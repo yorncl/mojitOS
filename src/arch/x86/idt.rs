@@ -34,6 +34,8 @@ pub fn ack_irq()
 pub extern "C" fn generic_handler(interrupt_code: u32)
 {
         klog!("Fucking let's goooo {}", interrupt_code);
+        // TODO temporary (and not generic enough to handle PIC only)?
+        super::apic::end_of_interrupt();
         // ack_irq();
         // asm!("push eax",
         //      "mov al, 0x20",

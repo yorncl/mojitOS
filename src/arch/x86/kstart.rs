@@ -9,6 +9,10 @@ use crate::memory::pmm::{Frame, FrameRange};
 use crate::memory::vmm;
 use super::PAGE_SIZE;
 
+use super::idt;
+use super::gdt;
+
+use core::arch::asm;
 
 use super::cpuid;
 use super::apic;
@@ -120,6 +124,8 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     //     klog!("{:x}", _vec_test[i]);
     // }
 
+    unsafe { asm!("cli"); }
+
     klog!("Setup ACPI");
     acpi::init().unwrap();
     klog!("Disabling PIC");
@@ -128,13 +134,12 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 
 
     // // klog!("This is reload_segments's address {:p}", reload_segments as *const());
-    // unsafe { asm!("cli"); }
     // klog!("CPU mode: {}", get_cpu_mode());
-    // gdt::load();
-    // klog!("GDT loaded");
-    // idt::setup();
-    // klog!("IDT setup");
-    // unsafe { asm!("sti"); }
+    gdt::load();
+    klog!("GDT loaded");
+    idt::setup();
+    klog!("IDT setup");
+    unsafe { asm!("sti"); }
 
     crate::kmain();    
 }

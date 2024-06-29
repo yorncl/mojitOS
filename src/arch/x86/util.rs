@@ -6,7 +6,7 @@ pub mod msrid {
     pub const LOCAL_APIC_BASE: u32 = 0x1b;
 }
 
-pub fn readmsr(id: u32) -> u64 {
+pub fn readmsr(id: u32) -> (u32, u32) {
 
     let low: u32;
     let high: u32;
@@ -22,7 +22,7 @@ pub fn readmsr(id: u32) -> u64 {
             out("edx") _,
         )
     }
-    (low as u64) | (high as u64 ) << 32
+    (low, high)
 }
 
 

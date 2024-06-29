@@ -32,7 +32,6 @@ pub fn remap_phys(phys_addr: usize, size: usize) -> Result<usize, &'static str> 
     let phys_start = ROUND_PAGE_DOWN!(phys_addr);
     let phys_end = ROUND_PAGE_UP!(phys_addr + size);
     let nframes = (phys_end - phys_start) / PAGE_SIZE;
-    klog!("phys_start: {:x}", phys_start);
 
     unsafe {
         match IOMM.allocate(nframes) {
