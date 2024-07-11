@@ -1,5 +1,5 @@
 use core::arch::asm;
-use crate::klog;
+use crate::{klog, memory::vmm::mapper, irq};
 use super::paging::page_fault_handler;
 use core::ptr::addr_of;
 
@@ -25,81 +25,39 @@ struct IDTDESC {
 
 static mut IDTR : IDTDESC = IDTDESC { size: 0, offset: 0 };
 
-#[inline(always)]
-pub fn ack_irq()
-{
+
+extern "C" {
+    fn fill_idt(idt_address: usize);
 }
 
 #[no_mangle]
 pub extern "C" fn generic_handler(interrupt_code: u32)
 {
-        klog!("Fucking let's goooo {}", interrupt_code);
+        klog!("Interrupt Irq={}", interrupt_code);
         // TODO temporary (and not generic enough to handle PIC only)?
+        irq::raise_irq(interrupt_code);
         super::apic::end_of_interrupt();
-        // ack_irq();
-        // asm!("push eax",
-        //      "mov al, 0x20",
-        //      "out 0x20, al",
-        //      "pop eax",
-        //      options(nostack, preserves_flags));
 }
 
 #[no_mangle]
-pub fn exception_handler(_code:u32)
-{
-    klog!("CPU Exception !!!!!");
-    loop{}
-}
-
-#[no_mangle]
-pub fn keystroke_handler(data: u32)
-{
-    klog!("Keystroke code : {:x}", data);
-}
-
-extern "C" {
-    fn interrupt_wrapper(data: u32);
-}
-
-fn set_exception(i: usize, handler: u32, selector: u16, flags: u8)
+pub extern "C" fn fill_idt_entry(i: usize, handler_address: u32)
 {
     unsafe {
-        IDT[i].offset_low = ((handler as u32) & 0xffff) as u16;
-        IDT[i].selector = selector;
+        IDT[i].offset_low = (handler_address & 0xffff) as u16;
+        // index must be shifted by 3 bits because
+        IDT[i].selector = 1 << 3;
         IDT[i].zero = 0;
-        IDT[i].flags = flags;
-        IDT[i].offset_high = (exception_handler as u32 >> 16) as u16;
-    }
-}
-
-// TODO hangler type is ugly
-fn set_interrupt(i: usize, handler: unsafe extern fn (u32) -> (), selector: u16, flags: u8)
-{
-    unsafe {
-        IDT[i].offset_low = ((handler as u32) & 0xffff) as u16;
-        IDT[i].selector = selector;
-        IDT[i].zero = 0;
-        IDT[i].flags = flags;
-        IDT[i].offset_high = (exception_handler as u32 >> 16) as u16;
-    }
-}
-
-// TODO spurious vector interrupts
-fn setup_handlers()
-{
-    for i in 0..0x20 {
-        set_exception(i, exception_handler as u32, 1 << 3, 0x8e);
-    }
-    set_exception(0xe, page_fault_handler as u32, 1 << 3, 0x8e);
-    for i in 0x20..256 {
-        set_interrupt(i, interrupt_wrapper, 1 << 3, 0x8e);
+        // 8 is for present, e is for interrupt gate type
+        IDT[i].flags = 0x8e;
+        IDT[i].offset_high = (handler_address >> 16) as u16;
     }
 }
 
 pub fn setup()
 {
     unsafe {
-        setup_handlers();
+        fill_idt(IDT.as_ptr() as usize);
+
         IDTR.size = (IDT.len() * core::mem::size_of::<IdtEntry>() - 1) as u16; // TODO why remove 1
         IDTR.offset = addr_of!(IDT) as *const _ as u32;
 

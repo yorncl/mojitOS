@@ -4,6 +4,7 @@ pub mod io;
 pub mod idt;
 pub mod paging;
 pub mod cpuid;
+pub mod irq;
 mod util;
 mod apic;
 mod acpi;
@@ -56,3 +57,9 @@ The last 4MB are reserved in the Page Directory to achieve recursive mapping
 ------------------- 0xffffffff
 
 */
+
+// TODO move somewhere else
+use core::arch::asm;
+pub fn disable_interrupts() {
+    unsafe {asm!("cli")};
+}

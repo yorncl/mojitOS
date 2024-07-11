@@ -9,7 +9,7 @@ use super::acpi::ACPISDTHeader;
 
 #[repr(usize)]
 #[allow(dead_code)]
-enum RegId {
+enum RegLapic {
     Spurious = 0xf0, // interrupts which have no source
     Eoi = 0xb0,
     TimerLvt = 0x320, // timer and local interrupts
@@ -73,17 +73,22 @@ fn ioapic_write_reg(reg: u32, value: u32) {
 
 static mut LAPIC_REMAP: usize = 0x0;
 #[inline(always)]
-fn lapic_read_reg(offset: RegId) -> u32{
-    unsafe {*((LAPIC_REMAP + offset as usize) as *const u32)}
+fn lapic_read_reg(offset: RegLapic) -> u32{
+    unsafe {
+        let ptr = (LAPIC_REMAP + offset as usize) as *const u32;
+        core::intrinsics::volatile_load::<u32>(ptr)
+    }
 }
 #[inline(always)]
-fn lapic_write_reg(offset: RegId, value: u32) {
-    unsafe {*((LAPIC_REMAP + offset as usize) as *mut u32) = value}
+fn lapic_write_reg(offset: RegLapic, value: u32) {
+    unsafe {
+        let ptr = (LAPIC_REMAP + offset as usize) as *mut u32;
+        core::intrinsics::volatile_store::<u32>(ptr, value);
+    }
 }
 
-
 pub fn end_of_interrupt() {
-    lapic_write_reg(RegId::Eoi, 0);
+    lapic_write_reg(RegLapic::Eoi, 0);
 }
 
 // TODO only for test purposes
@@ -94,7 +99,7 @@ pub fn enable_ioapic_interrupts() {
     klog!("IOAPIC INT 1 Low {:x}", low);
     klog!("IOAPIC INT 1 High {:x}", high);
     // read apic id
-    let id = lapic_read_reg(RegId::ApicId);
+    let id = lapic_read_reg(RegLapic::ApicId);
     // TODO handle the destination correctly
     klog!("LAPIC id {:x}", id);
 
@@ -124,8 +129,8 @@ pub fn enable_lapic() {
         }
         // Setting the last entry in IDT for the spurious interrupts with 0xff
         // setting the 8th bit to enable the local APIC
-        let r = lapic_read_reg(RegId::Spurious) | 0xff | (1 << 8);
-        lapic_write_reg(RegId::Spurious, r); 
+        let r = lapic_read_reg(RegLapic::Spurious) | 0xff | (1 << 8);
+        lapic_write_reg(RegLapic::Spurious, r); 
 
 }
 

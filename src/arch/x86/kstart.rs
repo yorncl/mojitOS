@@ -15,7 +15,6 @@ use super::gdt;
 use core::arch::asm;
 
 use super::cpuid;
-use super::apic;
 use super::pic;
 use super::acpi;
 
@@ -125,11 +124,11 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     // }
 
     unsafe { asm!("cli"); }
+    klog!("Disabling PIC");
+    pic::disable();
 
     klog!("Setup ACPI");
     acpi::init().unwrap();
-    klog!("Disabling PIC");
-    pic::disable();
     klog!("Setup APIC");
 
 

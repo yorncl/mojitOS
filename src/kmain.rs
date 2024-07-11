@@ -19,6 +19,8 @@ mod utils;
 // include architecure specific code
 pub use arch::*;
 
+use crate::driver::input;
+
 
 #[cfg(test)]
 pub fn test_runner(tests: &[&dyn Fn()]) {
@@ -42,7 +44,12 @@ pub fn kmain() -> !
     klog!("Hello from kmain");
     #[cfg(test)]
     test_main();
-    loop {}
+
+    driver::kbd::init();
+    loop {
+        // TODO sleep if nothing to do ?
+        input::process_input_events();
+    }
 }
 
 #[panic_handler]
@@ -54,5 +61,7 @@ fn panic(_info: &PanicInfo) -> ! {
 
     #[cfg(test)]
     test_main();
+
+    arch::disable_interrupts();
     loop {}
 }
