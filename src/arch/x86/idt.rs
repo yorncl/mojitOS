@@ -1,5 +1,5 @@
 use core::arch::asm;
-use crate::{klog, memory::vmm::mapper, irq};
+use crate::{klog, memory::vmm::mapper, irq, x86::apic};
 use super::paging::page_fault_handler;
 use core::ptr::addr_of;
 
@@ -24,7 +24,6 @@ struct IDTDESC {
 }
 
 static mut IDTR : IDTDESC = IDTDESC { size: 0, offset: 0 };
-
 
 extern "C" {
     fn fill_idt(idt_address: usize);

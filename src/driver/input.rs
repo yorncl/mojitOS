@@ -22,7 +22,6 @@ pub fn process_input_events() {
     unsafe {
         while !QUEUE.is_empty() {
             let v = QUEUE.pop_front().unwrap();
-            klog!("{:?}", v);
         }
     }
 }

@@ -1,5 +1,6 @@
 use super::paging;
 use crate::driver::vga;
+use crate::x86::apic;
 use crate::x86::paging::ROUND_PAGE_UP;
 use crate::klog;
 use crate::arch::common::multiboot;
@@ -8,6 +9,8 @@ use crate::memory::pmm;
 use crate::memory::pmm::{Frame, FrameRange};
 use crate::memory::vmm;
 use super::PAGE_SIZE;
+
+use crate::driver;
 
 use super::idt;
 use super::gdt;
@@ -63,7 +66,6 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     if !cpuid::check_rdmsr() {
         panic!("RDMSR disabled!")
     }
-
     let kstart: usize;
     let kend: usize;
     unsafe {
@@ -129,7 +131,9 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 
     klog!("Setup ACPI");
     acpi::init().unwrap();
-    klog!("Setup APIC");
+
+    klog!("Setup APIC timer");
+    apic::timer::init();
 
 
     // // klog!("This is reload_segments's address {:p}", reload_segments as *const());
@@ -139,6 +143,9 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     idt::setup();
     klog!("IDT setup");
     unsafe { asm!("sti"); }
+
+    // PS/2 keyboard
+    driver::kbd::init();
 
     crate::kmain();    
 }

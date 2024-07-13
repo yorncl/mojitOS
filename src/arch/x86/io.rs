@@ -1,24 +1,46 @@
 use core::arch::asm;
 
-pub fn outb(port: u16, byte:u8)
+#[repr(u16)]
+pub enum Port {
+    // PS2 ports
+    PS2Data = 0x60,
+    // Read to get status, write to send command
+    PS2Control = 0x24,
+
+    // PIC
+    PICMasterCommand = 0x20,
+    PICMasterData = 0x21,
+    PICSlaveCommand = 0xA0,
+    PICSlaveData = 0xA1,
+
+    // PIT
+    PITChan0 = 0x40,
+    PITChan1 = 0x41,
+    PITChan2 = 0x42,
+    PITControl = 0x43,
+    // bit 0
+    PITGate = 0x61,
+}
+
+pub fn outb(port: Port, byte:u8)
 {
     unsafe {
         asm!(
             "out dx, al",
-            in("dx") port,
+            in("dx") port as u16,
             in("al") byte
             );
     }
 }
 
-pub fn inb(port: u16) -> u8
+pub fn inb(port: Port) -> u8
 {
 
     let byte : u8;
     unsafe {
         asm!(
             "in al, dx",
-            in("dx") port,
+            in("dx") port as u16,
             out("al") byte
             );
     }

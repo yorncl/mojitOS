@@ -45,7 +45,6 @@ pub fn kmain() -> !
     #[cfg(test)]
     test_main();
 
-    driver::kbd::init();
     loop {
         // TODO sleep if nothing to do ?
         input::process_input_events();

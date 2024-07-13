@@ -10,10 +10,12 @@ use super::acpi::ACPISDTHeader;
 #[repr(usize)]
 #[allow(dead_code)]
 enum RegLapic {
-    Spurious = 0xf0, // interrupts which have no source
+    ApicId = 0x20,
     Eoi = 0xb0,
-    TimerLvt = 0x320, // timer and local interrupts
-    ApicId = 0x20
+    Spurious = 0xf0, // interrupts which have no source
+    LVTTimer = 0x320, // timer and local interrupts
+    InitTimer = 0x380,
+    CurrentTimer = 0x390
 }
 
 // We need to store the address of APIC IO kj
@@ -131,8 +133,11 @@ pub fn enable_lapic() {
         // setting the 8th bit to enable the local APIC
         let r = lapic_read_reg(RegLapic::Spurious) | 0xff | (1 << 8);
         lapic_write_reg(RegLapic::Spurious, r); 
+        lapic_write_reg(RegLapic::LVTTimer, 0x43); 
 
 }
+
+
 
 // impl Apic {
 // }
@@ -190,5 +195,58 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
 }
 
 
+pub mod timer {
+    use crate::io;
+    use crate::io::Port;
+
+    use super::*;
+
+    pub fn poll() -> u32 { 
+        lapic_read_reg(RegLapic::CurrentTimer)
+    }
+    pub fn init() {
+
+        // Reseting the input gate
+        // let mut input_gate = io::inb(Port::PITGate) & 0xfe;
+        // input_gate |= 1;
+        // io::outb(Port::PITGate, input_gate);
+        // io::wait();
 
 
+        // set PIT chan 2 to mode 1 for one-shot
+        io::outb(Port::PITControl, 0b10110010);
+        io::wait();
+
+
+        // Sending number of ticks corresponding to 1/100s given PIT frequency
+        // Sending 2 bytes starting with LSB
+        io::outb(Port::PITChan2, 0x9b);
+        io::wait();
+        io::outb(Port::PITChan2, 0x2e);
+        io::wait();
+
+        lapic_write_reg(RegLapic::InitTimer, u32::MAX);
+
+        // klog!("PIT TIMER STARTING COUNTDOWN");
+        let mut input_gate = io::inb(Port::PITGate) & 0xfe;
+        io::outb(Port::PITGate, input_gate);
+        input_gate |= 1;
+        io::outb(Port::PITGate, input_gate);
+        io::wait();
+
+
+        loop {
+            // 5th bit to 1 indicate that the counter reached 0
+            let b = io::inb(Port::PITGate) & 0b100000;
+            io::wait();
+            if b > 0 { break };
+        }
+        let ticks = u32::MAX - lapic_read_reg(RegLapic::CurrentTimer);
+        // STOP THE COUNT !!!
+        lapic_write_reg(RegLapic::InitTimer, 0x0);
+        // Init with calculated ticks
+        lapic_write_reg(RegLapic::InitTimer, ticks * 50);
+        lapic_write_reg(RegLapic::LVTTimer, 0x20000 | 0x32);
+        klog!("LAPIC INIT TIMER {} ", lapic_read_reg(RegLapic::InitTimer));
+    }
+}
