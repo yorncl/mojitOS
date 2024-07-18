@@ -31,7 +31,7 @@ pub fn init() -> Result<(),()> {
     if conf & (1 << 6) != 0 {
         // panic!("PS2 translation enabled");
     }
-    if irq::request_irq(42, int_handler).is_err() {
+    if irq::request_irq_top(42, int_handler).is_err() {
         panic!("Could not init keyboard driver!");
     }
     Ok(())

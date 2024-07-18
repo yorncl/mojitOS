@@ -1,6 +1,7 @@
-use core::arch::asm;
-use crate::{klog, memory::vmm::mapper, irq, x86::apic};
+use super::context::Context;
 use super::paging::page_fault_handler;
+use crate::{irq, klog, memory::vmm::mapper, x86::apic};
+use core::arch::asm;
 use core::ptr::addr_of;
 
 #[repr(C)]
@@ -14,7 +15,13 @@ struct IdtEntry {
     offset_high: u16,
 }
 
-static mut IDT : [IdtEntry; 256] = [IdtEntry { offset_low: 0, selector: 0, zero: 0, flags: 0, offset_high: 0 }; 256];
+static mut IDT: [IdtEntry; 256] = [IdtEntry {
+    offset_low: 0,
+    selector: 0,
+    zero: 0,
+    flags: 0,
+    offset_high: 0,
+}; 256];
 
 #[repr(C)]
 #[repr(packed)]
@@ -23,24 +30,51 @@ struct IDTDESC {
     offset: u32,
 }
 
-static mut IDTR : IDTDESC = IDTDESC { size: 0, offset: 0 };
+static mut IDTR: IDTDESC = IDTDESC { size: 0, offset: 0 };
 
 extern "C" {
     fn fill_idt(idt_address: usize);
 }
 
-#[no_mangle]
-pub extern "C" fn generic_handler(interrupt_code: u32)
-{
-        klog!("Interrupt Irq={}", interrupt_code);
-        // TODO temporary (and not generic enough to handle PIC only)?
-        irq::raise_irq(interrupt_code);
-        super::apic::end_of_interrupt();
+#[repr(C)]
+struct IRetFrame {
+    eip: u32,
+    cs: u32,
+    eflags: u32,
+}
+
+#[repr(C)]
+struct IRetExceptionFrame {
+    eip: u32,
+    cs: u32,
+    eflags: u32,
+    code: u32
 }
 
 #[no_mangle]
-pub extern "C" fn fill_idt_entry(i: usize, handler_address: u32)
-{
+pub unsafe extern "C" fn exception_handler(code: u32, err_code: u32) {
+    klog!("EXCEPTION! Irq={}(0x{:x}) Code={:x}", code, code, err_code);
+    loop{}
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn generic_handler(interrupt_code: u32) {
+    // klog!("Interrupt Irq={}", interrupt_code);
+
+    // Exception
+    if interrupt_code < 32 {
+        klog!("Exception not handled!");
+        loop{}
+    }
+    // Not Exception
+    else {
+        super::apic::end_of_interrupt();
+        irq::top_handlers(interrupt_code);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fill_idt_entry(i: usize, handler_address: u32) {
     unsafe {
         IDT[i].offset_low = (handler_address & 0xffff) as u16;
         // index must be shifted by 3 bits because
@@ -52,8 +86,7 @@ pub extern "C" fn fill_idt_entry(i: usize, handler_address: u32)
     }
 }
 
-pub fn setup()
-{
+pub fn setup() {
     unsafe {
         fill_idt(IDT.as_ptr() as usize);
 
@@ -65,6 +98,10 @@ pub fn setup()
             in(reg) addr_of!(IDTR),
             options(nostack, preserves_flags)
         );
-        klog!("IDT pointer : {:x}, size : {:x}", addr_of!(IDTR) as *const _ as u32, IDT.len() * core::mem::size_of::<IdtEntry>() - 1);
+        klog!(
+            "IDT pointer : {:x}, size : {:x}",
+            addr_of!(IDTR) as *const _ as u32,
+            IDT.len() * core::mem::size_of::<IdtEntry>() - 1
+        );
     }
 }

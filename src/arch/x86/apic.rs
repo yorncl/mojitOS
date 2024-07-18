@@ -196,7 +196,7 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
 
 
 pub mod timer {
-    use crate::io;
+    use crate::{io, irq};
     use crate::io::Port;
 
     use super::*;
@@ -250,3 +250,5 @@ pub mod timer {
         klog!("LAPIC INIT TIMER {} ", lapic_read_reg(RegLapic::InitTimer));
     }
 }
+
+

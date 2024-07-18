@@ -237,7 +237,7 @@ unsafe impl GlobalAlloc for Lock<ListAllocator>
     unsafe fn alloc(&self, layout: Layout) -> *mut u8
     {
         let alloc = self.get();
-        alloc.print_list();
+        // alloc.print_list();
         let (size, _align) = ListAllocator::adjust_layout(layout);
         match alloc.alloc_block(size + size_of::<BlockInfo>()) { // TODO better alignment
             // management
@@ -252,7 +252,7 @@ unsafe impl GlobalAlloc for Lock<ListAllocator>
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout)
     {
         let alloc = self.get();
-        alloc.print_list();
+        // alloc.print_list();
         // TODO check aligntment and use layout
         // TODO Add a mechanism to check if the pointer is valid ?
         let block_address = ptr as usize - binfo_size!();

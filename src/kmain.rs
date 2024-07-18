@@ -6,20 +6,24 @@
 #![test_runner(crate::test_runner)]
 
 #![feature(core_intrinsics)]
+#![feature(asm_const)]
+
+#[macro_use]
+extern crate alloc;
 
 use core::panic::PanicInfo;
-extern crate alloc;
 
 mod klib;
 mod driver;
 mod arch;
 mod memory;
 mod utils;
+mod proc;
 
 // include architecure specific code
 pub use arch::*;
 
-use crate::driver::input;
+use crate::proc::schedule;
 
 
 #[cfg(test)]
@@ -38,6 +42,27 @@ fn trivial_assertion() {
 }
 
 
+
+pub fn spawn_proc_0() {
+    let mut val = 0;
+    loop {
+        klog!("Proc 0 ---- {}", val);
+        for _i in 0..1000000 {
+        }
+        val += 1;
+    }
+}
+pub fn spawn_proc_1() {
+    let mut val = 0;
+    loop {
+        klog!("Proc 1 ---- {}", val);
+        for _i in 0..1000000 {
+        }
+        val += 1;
+    }
+}
+
+
 pub fn kmain() -> !
 {
     #[cfg(test)]
@@ -45,9 +70,10 @@ pub fn kmain() -> !
     #[cfg(test)]
     test_main();
 
+    schedule::init();
+    schedule::new_kernel_thread(spawn_proc_0);
+    schedule::new_kernel_thread(spawn_proc_1);
     loop {
-        // TODO sleep if nothing to do ?
-        input::process_input_events();
     }
 }
 
@@ -62,5 +88,6 @@ fn panic(_info: &PanicInfo) -> ! {
     test_main();
 
     arch::disable_interrupts();
+
     loop {}
 }

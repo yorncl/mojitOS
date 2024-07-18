@@ -49,6 +49,8 @@ clean:
 
 run: iso # TODO for some reason using the $(ISO) rule as dependency requires to run this twice for the iso to be rebuilt
 	$(QEMU) -cdrom $(ISO) -no-reboot
+run-monitor: iso # TODO for some reason using the $(ISO) rule as dependency requires to run this twice for the iso to be rebuilt
+	$(QEMU) -cdrom $(ISO) -no-reboot -d int,cpu_reset
 
 klib_test:
 	$(CARGO) test --no-run

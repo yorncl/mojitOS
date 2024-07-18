@@ -21,28 +21,6 @@ use super::cpuid;
 use super::pic;
 use super::acpi;
 
-
-// pub fn get_cpu_mode() -> &'static str {
-//     let mode: u32;
-//     unsafe {
-//         asm!(
-//             "mov {0}, cr0",
-//             "and eax, 0x1",
-//             out(reg) mode,
-//             options(nostack, preserves_flags)
-//         );
-//     }
-
-//     if mode == 0 {
-//         "real mode"
-//     } else if mode == 1 {
-//         "protected mode"
-//     } 
-//     else {
-//         "wtf"
-//     }
-// }
-
 extern "C" {
     static kernel_image_start : u32;
     static kernel_image_end : u32;
@@ -145,7 +123,10 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     unsafe { asm!("sti"); }
 
     // PS/2 keyboard
-    driver::kbd::init();
+    driver::kbd::init().unwrap();
 
-    crate::kmain();    
+    // TODO not a clear way to init scheduler, should be in kmain
+    // driver::timer::init();
+
+    crate::kmain();
 }
