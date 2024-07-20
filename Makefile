@@ -5,6 +5,7 @@ CARGO=cargo
 
 NAME=mojitos.elf
 ISO=mojitos.iso
+DISK_IMG=disk.img
 AS=nasm
 # TODO do a check for DEBUG=1 in command line
 ASFLAGS=-f elf32 -g
@@ -24,9 +25,19 @@ all: $(NAME)
 
 $(NAME): $(KLIB) asm link
 
-iso: $(NAME)
-	cp mojitos.elf iso/boot/mojitos.elf
-	grub-mkrescue -o $(ISO) iso
+# iso: $(NAME)
+# 	cp mojitos.elf iso/boot/mojitos.elf
+# 	grub-mkrescue -o $(ISO) iso
+
+$(DISKIMG): 
+	./build_disk.sh
+
+update_mnt: all
+	mkdir -p mnt
+	cp $(NAME) mnt/$(NAME)
+	# I got issues where the file wasn't immediately runnable by grub when copied in the vfat mounted folder
+	sync
+	
 
 $(KLIB):
 	$(CARGO) build  # TODO debug ?
@@ -47,20 +58,19 @@ clean:
 	rm -f $(NAME)
 	rm -f $(ASM_OBJECTS)
 
-run: iso # TODO for some reason using the $(ISO) rule as dependency requires to run this twice for the iso to be rebuilt
-	$(QEMU) -cdrom $(ISO) -no-reboot
-run-monitor: iso # TODO for some reason using the $(ISO) rule as dependency requires to run this twice for the iso to be rebuilt
-	$(QEMU) -cdrom $(ISO) -no-reboot -d int,cpu_reset
+# run_iso: iso # TODO for some reason using the $(ISO) rule as dependency requires to run this twice for the iso to be rebuilt
+# 	$(QEMU) -cdrom $(ISO) -no-reboot
+
+run: update_mnt $(DISKIMG)
+	$(QEMU) -drive format=raw,file=$(DISK_IMG)
 
 klib_test:
 	$(CARGO) test --no-run
-test: klib_test asm link
-	cp mojitos.elf iso/boot/mojitos.elf
-	grub-mkrescue -o $(ISO) iso
-	$(QEMU) -cdrom $(ISO) -no-reboot
 
-run_non_iso: $(NAME) # TODO I think there is a bug in qemu for multiboot
-	$(QEMU) -kernel $(NAME)
+# test: klib_test asm link
+# 	cp mojitos.elf iso/boot/mojitos.elf
+# 	grub-mkrescue -o $(ISO) iso
+# 	$(QEMU) -cdrom $(ISO) -no-reboot
 
 debug: $(NAME)
 	$(QEMU) -kernel $(NAME) -s -S -no-reboot -d int,cpu_reset
