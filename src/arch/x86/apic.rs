@@ -245,7 +245,7 @@ pub mod timer {
         // STOP THE COUNT !!!
         lapic_write_reg(RegLapic::InitTimer, 0x0);
         // Init with calculated ticks
-        lapic_write_reg(RegLapic::InitTimer, ticks * 50);
+        lapic_write_reg(RegLapic::InitTimer, ticks);
         lapic_write_reg(RegLapic::LVTTimer, 0x20000 | 0x32);
         klog!("LAPIC INIT TIMER {} ", lapic_read_reg(RegLapic::InitTimer));
     }

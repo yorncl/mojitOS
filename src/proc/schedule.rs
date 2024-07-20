@@ -3,7 +3,7 @@ use core::mem;
 use crate::arch::context;
 use crate::arch::context::Context;
 use crate::irq::request_irq_top;
-use crate::klog;
+use crate::{klog, lock};
 
 use alloc::vec::Vec;
 
@@ -42,6 +42,12 @@ pub fn schedule() -> Result<(), ()> {
         context::switch(&mut TASKS[prev].context, &mut TASKS[CURRENT].context);
     }
     Ok(())
+}
+
+
+pub extern "C" fn unlock_scheduler() {
+
+    // TODO proper unlocking
 }
 
 use core::arch::asm;

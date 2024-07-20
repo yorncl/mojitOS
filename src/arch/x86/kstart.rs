@@ -103,7 +103,8 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     //     klog!("{:x}", _vec_test[i]);
     // }
 
-    unsafe { asm!("cli"); }
+
+    super::disable_interrupts();
     klog!("Disabling PIC");
     pic::disable();
 
@@ -120,13 +121,10 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     klog!("GDT loaded");
     idt::setup();
     klog!("IDT setup");
-    unsafe { asm!("sti"); }
 
     // PS/2 keyboard
     driver::kbd::init().unwrap();
 
     // TODO not a clear way to init scheduler, should be in kmain
-    // driver::timer::init();
-
     crate::kmain();
 }

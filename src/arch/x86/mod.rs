@@ -8,6 +8,7 @@ pub mod irq;
 pub mod timer;
 pub mod kstart;
 pub mod context;
+pub mod lock;
 
 mod util;
 mod apic;
@@ -65,4 +66,7 @@ The last 4MB are reserved in the Page Directory to achieve recursive mapping
 use core::arch::asm;
 pub fn disable_interrupts() {
     unsafe {asm!("cli")};
+}
+pub fn enable_interrupts() {
+    unsafe {asm!("sti")};
 }

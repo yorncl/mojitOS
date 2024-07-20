@@ -232,6 +232,9 @@ impl ListAllocator
 }
 
 
+// TODO move
+use crate::arch::lock;
+
 unsafe impl GlobalAlloc for Lock<ListAllocator>
 {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8

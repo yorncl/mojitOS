@@ -73,6 +73,7 @@ pub fn kmain() -> !
     schedule::init();
     schedule::new_kernel_thread(spawn_proc_0);
     schedule::new_kernel_thread(spawn_proc_1);
+    enable_interrupts();
     loop {
     }
 }

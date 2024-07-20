@@ -51,6 +51,8 @@ impl Context {
     }
 }
 
+use crate::schedule;
+
 // TODO think of unlock context in the future, cf Redox
 // EAX, ECX, EDX saved by caller
 #[no_mangle]
@@ -59,7 +61,6 @@ extern "cdecl" fn switch_inner(prev: &mut Context, next: &mut Context) {
         // TODO eflags
         asm!(
             concat!("
-
                 pushfd
                 mov eax, [esp]
                 mov [ecx + {off_eflags}], eax
@@ -78,6 +79,8 @@ extern "cdecl" fn switch_inner(prev: &mut Context, next: &mut Context) {
                 mov [ecx + {off_ebp}], ebp
                 mov esp, [edx + {off_esp}]
                 mov ebp, [edx + {off_ebp}]
+                
+                jmp {unlock_sched_hook}
             "
             ),
             in("ecx") prev,
@@ -88,6 +91,7 @@ extern "cdecl" fn switch_inner(prev: &mut Context, next: &mut Context) {
             off_esp = const(offset_of!(Context, esp)),
             off_ebp = const(offset_of!(Context, ebp)),
             off_eflags = const(offset_of!(Context, eflags)),
+            unlock_sched_hook = sym schedule::unlock_scheduler,
             options(nostack)
         );
     }

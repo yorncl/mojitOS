@@ -1,6 +1,7 @@
 
 // A simple vga text driver
 use crate::klib::mem;
+use crate::lock::spin_lock;
 use core::fmt;
 use core::fmt::Write;
 use core::ffi::c_void;
@@ -38,10 +39,14 @@ pub fn io_init()
     }
 }
 
+use crate::arch::lock;
+
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     unsafe {
+        lock::spin_lock();
         VGA_INSTANCE.as_mut().unwrap().write_fmt(args).unwrap();
+        lock::spin_release();
     }
 }
 
