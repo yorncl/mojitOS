@@ -20,6 +20,10 @@ pub enum Port {
     PITControl = 0x43,
     // bit 0
     PITGate = 0x61,
+    
+    // PCI
+    PCICONFIG_ADDRESS = 0xCF8,
+    PCICONFIG_DATA = 0xCFC,
 }
 
 pub fn outb(port: Port, byte:u8)
@@ -36,8 +40,7 @@ pub fn outb(port: Port, byte:u8)
 pub fn inb(port: Port) -> u8
 {
 
-    let byte : u8;
-    unsafe {
+    let byte : u8; unsafe {
         asm!(
             "in al, dx",
             in("dx") port as u16,
@@ -45,6 +48,31 @@ pub fn inb(port: Port) -> u8
             );
     }
     byte
+}
+
+pub fn outl(port: Port, long:u32)
+{
+    unsafe {
+        asm!(
+            "out dx, eax",
+            in("dx") port as u16,
+            in("eax") long
+            );
+    }
+}
+
+pub fn inl(port: Port) -> u32
+{
+
+    let long : u32;
+    unsafe {
+        asm!(
+            "in eax, dx",
+            in("dx") port as u16,
+            out("eax") long
+            );
+    }
+    long
 }
 
 // TODO wtf ? I don't remember why I did that

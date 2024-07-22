@@ -62,7 +62,8 @@ clean:
 # 	$(QEMU) -cdrom $(ISO) -no-reboot
 
 run: update_mnt $(DISKIMG)
-	$(QEMU) -drive format=raw,file=$(DISK_IMG)
+	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -monitor stdio
+
 
 klib_test:
 	$(CARGO) test --no-run

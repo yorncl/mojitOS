@@ -19,6 +19,7 @@ mod arch;
 mod memory;
 mod utils;
 mod proc;
+mod fs;
 
 // include architecure specific code
 pub use arch::*;
@@ -40,8 +41,6 @@ fn trivial_assertion() {
     assert_eq!(1, 1);
     klog!("[ok]");
 }
-
-
 
 pub fn spawn_proc_0() {
     let mut val = 0;
@@ -69,11 +68,13 @@ pub fn kmain() -> !
     klog!("Hello from kmain");
     #[cfg(test)]
     test_main();
+    
+    fs::vfs::init();
 
-    schedule::init();
-    schedule::new_kernel_thread(spawn_proc_0);
-    schedule::new_kernel_thread(spawn_proc_1);
-    enable_interrupts();
+//     schedule::init();
+//     schedule::new_kernel_thread(spawn_proc_0);
+//     schedule::new_kernel_thread(spawn_proc_1);
+//     enable_interrupts();
     loop {
     }
 }

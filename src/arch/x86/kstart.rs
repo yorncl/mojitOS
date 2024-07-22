@@ -15,6 +15,8 @@ use crate::driver;
 use super::idt;
 use super::gdt;
 
+use super::pci;
+
 use core::arch::asm;
 
 use super::cpuid;
@@ -125,6 +127,7 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     // PS/2 keyboard
     driver::kbd::init().unwrap();
 
+    pci::init();
     // TODO not a clear way to init scheduler, should be in kmain
     crate::kmain();
 }
