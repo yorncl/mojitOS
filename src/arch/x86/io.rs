@@ -49,6 +49,30 @@ pub fn inb(port: u16) -> u8
     byte
 }
 
+pub fn outw(port: u16, word:u16)
+{
+    unsafe {
+        asm!(
+            "out dx, ax",
+            in("dx") port,
+            in("ax") word
+            );
+    }
+}
+
+pub fn inw(port: u16) -> u16
+{
+
+    let word : u16; unsafe {
+        asm!(
+            "in ax, dx",
+            in("dx") port,
+            out("ax") word
+            );
+    }
+    word
+}
+
 pub fn outl(port: u16, long:u32)
 {
     unsafe {

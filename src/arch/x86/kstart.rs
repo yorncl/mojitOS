@@ -138,7 +138,7 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
         match pci_dev.kind {
             pci::PCIType::IDE => {
                 // probe the controller
-                if let Some(drv) = pci_ide::probe_controller(&pci_dev) {
+                if let Some(drv) = pci_ide::IDEDev::probe_controller(&pci_dev) {
                     klog!("IDE driver init");
                     block_drivers.push(drv);
                 }
@@ -146,6 +146,8 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
             _ => {}
         }
     }
+
+    loop{}
     // TODO not a clear way to init scheduler, should be in kmain
     crate::kmain();
 }
