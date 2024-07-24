@@ -121,7 +121,7 @@ impl IDEDev {
 
     // Might need to run that after a drive select
     fn poll_status(&self, channel: usize) {
-        for _ in 0..30 {
+        for _ in 0..2000 {
             self.read_pio_reg(channel, ATA_REG_STATUS);
         }
     }
@@ -129,6 +129,9 @@ impl IDEDev {
     fn probe_disk(&mut self, channel: usize, disk_function: u8) {
         // Select the drive
         self.write_pio_reg(channel,ATA_REG_HDDEVSEL, disk_function);
+        let mut status = self.read_pio_reg(channel, ATA_REG_STATUS);
+        klog!("1 Status {:b}", status);
+        
         self.poll_status(channel);
 
         // Preparing to send IDENTIFY command
@@ -138,7 +141,8 @@ impl IDEDev {
         self.write_pio_reg(channel, ATA_REG_LBA2, 0);
         self.write_pio_reg(channel, ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
 
-        let mut status = self.read_pio_reg(channel, ATA_REG_STATUS);
+        status = self.read_pio_reg(channel, ATA_REG_STATUS);
+        klog!("2 Status {:b}", status);
         if status == 0 {
             klog!("IDE: NO DRIVE ON CHANNEL {} with function {:x}", channel, disk_function);
             return
@@ -147,6 +151,7 @@ impl IDEDev {
         while status & 0x80 != 0 {
             status = self.read_pio_reg(channel, ATA_REG_STATUS);
         }
+        klog!("3 Status {:b}", status);
         if self.read_pio_reg(channel, ATA_REG_LBA1) != 0 || self.read_pio_reg(channel, ATA_REG_LBA2) != 0 {
             // Not an ATA drive
             return
@@ -159,16 +164,16 @@ impl IDEDev {
             if status & 0x1 != 0 {klog!("IDE ERROR"); return;}
             if status & 0x80 == 0 && status & 0x8 != 0  {break}
         }
+        klog!("4 Status {:b}", status);
 
         // Collect identify response
-        let mut id_response: [u8; 512] = [0;512];
+        let mut id_response: [u16; 256] = [0;256];
         for i in 0..256 {
-            let bytes = io::inw(ATA_REG_DATA);
-            // klog!("Reading response bytes: {:x}", byteanics);
-            id_response[i] = bytes as u8;
-            id_response[i + 1] = (bytes >> 8) as u8;
+            id_response[i] = io::inw(self.pio_reg_base[channel] + ATA_REG_DATA);
+            // klog!("Reading response bytes: {:x}", bytes);
+            // self.poll_status(channel);
         }
-        klog!("IDE disk serial {:x}{:x}", id_response[ATA_IDENT_SERIAL + 1], id_response[ATA_IDENT_SERIAL]);
+        klog!("IDE disk serial {:x}", id_response[ATA_IDENT_SERIAL]);
     }
 
     pub fn probe_controller(pci_dev: &PCIDevice) -> Option<Box<IDEDev>> {
@@ -197,6 +202,11 @@ impl IDEDev {
         dev.pio_control_base[1] = 0x376;
 
         dev.dma_reg = pci_dev.get_bar(4).try_into().unwrap();
+        klog!("BAR0 0x{:x}", pci_dev.get_bar(0));
+        klog!("BAR1 0x{:x}", pci_dev.get_bar(1));
+        klog!("BAR2 0x{:x}", pci_dev.get_bar(2));
+        klog!("BAR3 0x{:x}", pci_dev.get_bar(3));
+        klog!("BAR4 0x{:x}", pci_dev.get_bar(4));
 
         // channel 1 master/slave
         dev.probe_disk(0, 0xA0);
