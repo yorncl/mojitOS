@@ -197,7 +197,7 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
 
 pub mod timer {
     use crate::{io, irq};
-    use crate::io::Port;
+    use crate::io::port;
 
     use super::*;
 
@@ -207,37 +207,37 @@ pub mod timer {
     pub fn init() {
 
         // Reseting the input gate
-        // let mut input_gate = io::inb(Port::PITGate) & 0xfe;
+        // let mut input_gate = io::inb(port::PITGate) & 0xfe;
         // input_gate |= 1;
-        // io::outb(Port::PITGate, input_gate);
+        // io::outb(port::PITGate, input_gate);
         // io::wait();
 
 
         // set PIT chan 2 to mode 1 for one-shot
-        io::outb(Port::PITControl, 0b10110010);
+        io::outb(port::PITCONTROL, 0b10110010);
         io::wait();
 
 
         // Sending number of ticks corresponding to 1/100s given PIT frequency
         // Sending 2 bytes starting with LSB
-        io::outb(Port::PITChan2, 0x9b);
+        io::outb(port::PITCHAN2, 0x9b);
         io::wait();
-        io::outb(Port::PITChan2, 0x2e);
+        io::outb(port::PITCHAN2, 0x2e);
         io::wait();
 
         lapic_write_reg(RegLapic::InitTimer, u32::MAX);
 
         // klog!("PIT TIMER STARTING COUNTDOWN");
-        let mut input_gate = io::inb(Port::PITGate) & 0xfe;
-        io::outb(Port::PITGate, input_gate);
+        let mut input_gate = io::inb(port::PITGATE) & 0xfe;
+        io::outb(port::PITGATE, input_gate);
         input_gate |= 1;
-        io::outb(Port::PITGate, input_gate);
+        io::outb(port::PITGATE, input_gate);
         io::wait();
 
 
         loop {
             // 5th bit to 1 indicate that the counter reached 0
-            let b = io::inb(Port::PITGate) & 0b100000;
+            let b = io::inb(port::PITGATE) & 0b100000;
             io::wait();
             if b > 0 { break };
         }

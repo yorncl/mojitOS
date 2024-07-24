@@ -68,9 +68,9 @@ pub fn kmain() -> !
     klog!("Hello from kmain");
     #[cfg(test)]
     test_main();
-    
-    fs::vfs::init();
 
+    fs::vfs::init();
+    
 //     schedule::init();
 //     schedule::new_kernel_thread(spawn_proc_0);
 //     schedule::new_kernel_thread(spawn_proc_1);

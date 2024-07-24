@@ -1,74 +1,73 @@
 use core::arch::asm;
 
-#[repr(u16)]
-pub enum Port {
+pub mod port {
     // PS2 ports
-    PS2Data = 0x60,
+    pub const PS2DATA: u16 = 0x60;
     // Read to get status, write to send command
-    PS2Control = 0x24,
+    pub const PS2CONTROL: u16 = 0x24;
 
     // PIC
-    PICMasterCommand = 0x20,
-    PICMasterData = 0x21,
-    PICSlaveCommand = 0xA0,
-    PICSlaveData = 0xA1,
+    pub const PICMASTERCOMMAND: u16 = 0x20;
+    pub const PICMASTERDATA: u16 = 0x21;
+    pub const PICSLAVECOMMAND: u16 = 0xA0;
+    pub const PICSLAVEDATA: u16 = 0xA1;
 
     // PIT
-    PITChan0 = 0x40,
-    PITChan1 = 0x41,
-    PITChan2 = 0x42,
-    PITControl = 0x43,
+    pub const PITCHAN0: u16 = 0x40;
+    pub const PITCHAN1: u16 = 0x41;
+    pub const PITCHAN2: u16 = 0x42;
+    pub const PITCONTROL: u16 = 0x43;
     // bit 0
-    PITGate = 0x61,
+    pub const PITGATE: u16 = 0x61;
     
     // PCI
-    PCICONFIG_ADDRESS = 0xCF8,
-    PCICONFIG_DATA = 0xCFC,
+    pub const PCICONFIG_ADDRESS: u16 = 0xCF8;
+    pub const PCICONFIG_DATA: u16 = 0xCFC;
 }
 
-pub fn outb(port: Port, byte:u8)
+pub fn outb(port: u16, byte:u8)
 {
     unsafe {
         asm!(
             "out dx, al",
-            in("dx") port as u16,
+            in("dx") port,
             in("al") byte
             );
     }
 }
 
-pub fn inb(port: Port) -> u8
+pub fn inb(port: u16) -> u8
 {
 
     let byte : u8; unsafe {
         asm!(
             "in al, dx",
-            in("dx") port as u16,
+            in("dx") port,
             out("al") byte
             );
     }
     byte
 }
 
-pub fn outl(port: Port, long:u32)
+pub fn outl(port: u16, long:u32)
 {
     unsafe {
         asm!(
             "out dx, eax",
-            in("dx") port as u16,
+            in("dx") port,
             in("eax") long
             );
     }
 }
 
-pub fn inl(port: Port) -> u32
+pub fn inl(port: u16) -> u32
 {
 
     let long : u32;
     unsafe {
         asm!(
             "in eax, dx",
-            in("dx") port as u16,
+            in("dx") port,
             out("eax") long
             );
     }

@@ -1,5 +1,5 @@
 use crate::arch::x86::io;
-use crate::arch::x86::io::Port;
+use crate::arch::x86::io::port;
 
 
 #[allow(dead_code)]
@@ -26,34 +26,34 @@ enum ICW4 {
 fn pic_remap(offset1: i8, offset2: i8)
 {
     // save masks
-    // let master_mask = io::inb(Port::PICMasterData);
-    let slave_mask = io::inb(Port::PICSlaveData);
+    // let master_mask = io::inb(port::PICMASTERDATA);
+    let slave_mask = io::inb(port::PICSLAVEDATA);
 
-    io::outb(Port::PICMasterCommand, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC reset
+    io::outb(port::PICMASTERCOMMAND, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC reset
     io::wait();
-    io::outb(Port::PICSlaveCommand, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC resetS
+    io::outb(port::PICSLAVECOMMAND, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC resetS
     io::wait();
 
     // remap 
-    io::outb(Port::PICMasterData, offset1 as u8);
+    io::outb(port::PICMASTERDATA, offset1 as u8);
     io::wait();
-    io::outb(Port::PICSlaveData, offset2 as u8);
+    io::outb(port::PICSLAVEDATA, offset2 as u8);
     io::wait();
-    io::outb(Port::PICMasterData, 4);
+    io::outb(port::PICMASTERDATA, 4);
     io::wait();
-    io::outb(Port::PICSlaveData, 2);
+    io::outb(port::PICSLAVEDATA, 2);
     io::wait();
 
 
-    io::outb(Port::PICMasterData, ICW4::_8086 as u8);
+    io::outb(port::PICMASTERDATA, ICW4::_8086 as u8);
     io::wait();
-    io::outb(Port::PICSlaveData, ICW4::_8086 as u8);
+    io::outb(port::PICSLAVEDATA, ICW4::_8086 as u8);
     io::wait();
 
     // rewrite saved masks 
-    io::outb(Port::PICMasterData, 0xFD); // TODO this "as u16" is ugly, can we find a
+    io::outb(port::PICMASTERDATA, 0xFD); // TODO this "as u16" is ugly, can we find a
                                                        // better way
-    io::outb(Port::PICSlaveData, slave_mask);
+    io::outb(port::PICSLAVEDATA, slave_mask);
     io::wait();
 }
 
@@ -64,8 +64,8 @@ pub fn setup()
 
 pub fn disable() {
     setup();
-    io::outb(Port::PICMasterData, 0xFF);
-    io::outb(Port::PICSlaveData, 0xFF);
+    io::outb(port::PICMASTERDATA, 0xFF);
+    io::outb(port::PICSLAVEDATA, 0xFF);
     // TODO is all that waiting necessary ?
     io::wait();
 }

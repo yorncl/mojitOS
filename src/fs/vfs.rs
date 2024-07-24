@@ -1,8 +1,11 @@
 
+pub struct Dentry<'a> {
+    inode: Option<&'a Inode>,
+}
 
-pub struct Inode {}
-
-pub struct Dentry {}
+struct Inode {
+}
 
 pub fn init() {
+    // list mountpoints
 }

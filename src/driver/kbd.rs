@@ -2,7 +2,7 @@ use crate::arch::io;
 
 use super::input;
 use crate::arch::irq;
-use crate::arch::io::Port;
+use crate::arch::io::port;
 
 
 #[repr(u8)]
@@ -12,12 +12,12 @@ enum Command {
 
 #[inline(always)]
 fn read_data() -> u8 {
-    io::inb(Port::PS2Data)
+    io::inb(port::PS2DATA)
 }
 
 fn read_conf_byte() -> u8 {
-    io::outb(Port::PS2Control, Command::ReadConf as u8);
-    io::inb(Port::PS2Data)
+    io::outb(port::PS2CONTROL, Command::ReadConf as u8);
+    io::inb(port::PS2DATA)
 }
 
 fn int_handler() -> Result<(),()> {
