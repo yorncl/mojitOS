@@ -137,11 +137,6 @@ pub fn enable_lapic() {
 
 }
 
-
-
-// impl Apic {
-// }
-
 // Parse the MADT table
 // Find the IO APIC address
 pub fn parse_madt(address: *const ACPISDTHeader) {
@@ -193,7 +188,6 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
     }
     klog!("APIC init end");
 }
-
 
 pub mod timer {
     use crate::{io, irq};

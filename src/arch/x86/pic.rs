@@ -10,6 +10,7 @@ enum ICW1 {
     INTERVAL4 = 0x04,   // Call address interval 4 (8)
     LEVEL = 0x08,       // Level triggered (edge) mode
     INIT = 0x10,        // Initialization - required!
+    EOI = 0x20,         // End of interrupt
 }
 // TODO implem into/from trait to avoid casting ?
 
@@ -23,11 +24,17 @@ enum ICW4 {
     SFNM = 0x10,        // Special fully nested (not)
 }
 
+use crate::klog;
+
+use super::apic::end_of_interrupt;
 fn pic_remap(offset1: i8, offset2: i8)
 {
     // save masks
-    // let master_mask = io::inb(port::PICMASTERDATA);
+    let master_mask = io::inb(port::PICMASTERDATA);
     let slave_mask = io::inb(port::PICSLAVEDATA);
+
+    // klog!("PIC MASKS {:b} {:b}", master_mask, slave_mask);
+    // loop{}
 
     io::outb(port::PICMASTERCOMMAND, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC reset
     io::wait();
@@ -51,10 +58,17 @@ fn pic_remap(offset1: i8, offset2: i8)
     io::wait();
 
     // rewrite saved masks 
-    io::outb(port::PICMASTERDATA, 0xFD); // TODO this "as u16" is ugly, can we find a
+    io::outb(port::PICMASTERDATA, 1); // TODO this "as u16" is ugly, can we find a
                                                        // better way
-    io::outb(port::PICSLAVEDATA, slave_mask);
+    io::outb(port::PICSLAVEDATA, 0);
     io::wait();
+}
+
+pub fn eoi(interrupt_code: u32) {
+    if interrupt_code >= 8 {
+        io::outb(port::PICSLAVECOMMAND, ICW1::EOI as u8);
+    }
+    io::outb(port::PICMASTERCOMMAND, ICW1::EOI as u8);
 }
 
 pub fn setup()

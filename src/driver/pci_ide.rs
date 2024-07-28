@@ -1,7 +1,9 @@
-use crate::io;
+
+use crate::{io, kprint};
 use crate::arch::pci::PCIDevice;
 use crate::fs::block;
 use crate::klog;
+use crate::memory::vmm::mapper;
 
 
 #[repr(C, packed)]
@@ -12,14 +14,14 @@ pub struct PRD  {
     msb: u16
 }
 
-#[derive(Default)]
+use alloc::vec::Vec;
+
 pub struct IDEDev {
     // TODO allocate in DMA zone ideally
-    prdt: Option<Box<[PRD;512]>>,
-    prdt_tail: usize,
     pio_reg_base: [u16; 2],
     pio_control_base: [u16; 2],
-    dma_reg: u16,
+    active_bus: usize,
+    dma_reg_base: [u16; 2],
 }
 
 impl block::BlockDriver for IDEDev {
@@ -53,6 +55,7 @@ mod ata_macros {
     // ATA DMA regs offsets
     pub const DMA_COMMAND_PORT: u16 = 0x0;
     pub const DMA_STATUS_PORT: u16 = 0x2;
+    pub const DMA_PRDT_BASE: u16 = 0x4;
 
     // ATA COMMANDS
     pub const ATA_CMD_READ_PIO: u8 = 0x20;
@@ -83,9 +86,20 @@ mod ata_macros {
     pub const ATA_IDENT_COMMANDSETS: usize = 164;
     pub const ATA_IDENT_MAX_LBA_EXT: usize = 200;
 }
+use alloc::string::String;
 use ata_macros::*;
 
 use alloc::boxed::Box;
+
+#[repr(align(4))]
+struct AlignedArray {
+    array : [PRD; 512]
+}
+
+// TODO Put into DMA address space, that's gross right now
+static mut PRDT: AlignedArray  = AlignedArray{ array: [PRD {phys_addr: 0, bytes_count: 0, msb: 1 << 15}; 512]};
+
+static mut BUFFER: [u8;512] = [0 as u8; 512];
 
 #[allow(dead_code)]
 impl IDEDev {
@@ -94,65 +108,60 @@ impl IDEDev {
 
     pub fn new() -> Self {
         IDEDev {
-            prdt: Some(Box::<[PRD;512]>::new([PRD::default(); 512])),
-            prdt_tail: 0,
+            // TODO put behind lock
             pio_reg_base: [0; 2],
             pio_control_base: [0; 2],
-            dma_reg: 0
+            dma_reg_base: [0; 2],
+            active_bus: 0,
         }
     }
 
-    pub fn read_sector() {
-        todo!()
+    fn read_pio_reg(&self, port_offset: u16) -> u8 {
+        io::inb(self.pio_reg_base[self.active_bus] + port_offset)
     }
 
-    pub fn write_sector() {
-        // TODO should flush by ending 0xE7 command after write
-        todo!()
+    fn write_pio_reg(&self, port_offset: u16, data: u8) {
+        io::outb(self.pio_reg_base[self.active_bus] + port_offset, data);
     }
 
-    fn read_pio_reg(&self, channel: usize, port_offset: u16) -> u8 {
-        io::inb(self.pio_reg_base[channel as usize] + port_offset)
+    fn read_dma_reg(&self, port_offset: u16) -> u8 {
+
+        io::inb(self.dma_reg_base[self.active_bus] + port_offset)
     }
 
-    fn write_pio_reg(&self, channel: usize, port_offset: u16, data: u8) {
-        io::outb(self.pio_reg_base[channel as usize] + port_offset, data);
+    fn write_dma_reg(&self, port_offset: u16, data: u8) {
+        io::outb(self.dma_reg_base[self.active_bus] + port_offset, data);
     }
 
-    // Might need to run that after a drive select
-    fn poll_status(&self, channel: usize) {
-        for _ in 0..2000 {
-            self.read_pio_reg(channel, ATA_REG_STATUS);
+    // TODO clean up 
+    fn sel_channel(&mut self, bus: usize, disk: u8) {
+        self.active_bus = bus;
+        self.write_pio_reg(ATA_REG_HDDEVSEL, disk);
+        // Need to wait for a while
+        for _ in 0..200000 {
+            self.read_pio_reg(ATA_REG_STATUS);
         }
     }
 
-    fn probe_disk(&mut self, channel: usize, disk_function: u8) {
-        // Select the drive
-        self.write_pio_reg(channel,ATA_REG_HDDEVSEL, disk_function);
-        let mut status = self.read_pio_reg(channel, ATA_REG_STATUS);
-        klog!("1 Status {:b}", status);
-        
-        self.poll_status(channel);
-
+    fn probe_disk(&mut self, bus: usize, disk: u8) {
+        self.sel_channel(bus, disk);
         // Preparing to send IDENTIFY command
-        self.write_pio_reg(channel, ATA_REG_SECCOUNT0, 0);
-        self.write_pio_reg(channel, ATA_REG_LBA0, 0);
-        self.write_pio_reg(channel, ATA_REG_LBA1, 0);
-        self.write_pio_reg(channel, ATA_REG_LBA2, 0);
-        self.write_pio_reg(channel, ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
+        self.write_pio_reg(ATA_REG_SECCOUNT0, 0);
+        self.write_pio_reg(ATA_REG_LBA0, 0);
+        self.write_pio_reg(ATA_REG_LBA1, 0);
+        self.write_pio_reg(ATA_REG_LBA2, 0);
+        self.write_pio_reg(ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
 
-        status = self.read_pio_reg(channel, ATA_REG_STATUS);
-        klog!("2 Status {:b}", status);
+        let mut status = self.read_pio_reg(ATA_REG_STATUS);
         if status == 0 {
-            klog!("IDE: NO DRIVE ON CHANNEL {} with function {:x}", channel, disk_function);
+            klog!("IDE: NO DRIVE ON bus {} with function {:x}", bus, disk);
             return
         }
         // Wait for BSY bit to be cleared
         while status & 0x80 != 0 {
-            status = self.read_pio_reg(channel, ATA_REG_STATUS);
+            status = self.read_pio_reg(ATA_REG_STATUS);
         }
-        klog!("3 Status {:b}", status);
-        if self.read_pio_reg(channel, ATA_REG_LBA1) != 0 || self.read_pio_reg(channel, ATA_REG_LBA2) != 0 {
+        if self.read_pio_reg(ATA_REG_LBA1) != 0 || self.read_pio_reg(ATA_REG_LBA2) != 0 {
             // Not an ATA drive
             return
         }
@@ -160,35 +169,140 @@ impl IDEDev {
         // TODO bitflags
 
         loop {
-            status = self.read_pio_reg(channel, ATA_REG_STATUS);
+            status = self.read_pio_reg(ATA_REG_STATUS);
             if status & 0x1 != 0 {klog!("IDE ERROR"); return;}
             if status & 0x80 == 0 && status & 0x8 != 0  {break}
         }
-        klog!("4 Status {:b}", status);
 
         // Collect identify response
         let mut id_response: [u16; 256] = [0;256];
         for i in 0..256 {
-            id_response[i] = io::inw(self.pio_reg_base[channel] + ATA_REG_DATA);
-            // klog!("Reading response bytes: {:x}", bytes);
-            // self.poll_status(channel);
+            id_response[i] = io::inw(self.pio_reg_base[self.active_bus] + ATA_REG_DATA);
         }
-        klog!("IDE disk serial {:x}", id_response[ATA_IDENT_SERIAL]);
+
+        // Parse and build Disck Structure
+        klog!("Parsing disk structure");
+        let mut model = String::new();
+        // check if DMA mode
+        for i in 0..20 {
+            let bytes = id_response[ATA_IDENT_MODEL/2 + i];
+            model.push((bytes >> 8) as u8 as char);
+            model.push(bytes as u8 as char);
+        }
+        klog!("Identifier: '{}'", model);
+    }
+
+    fn test_read_pio(&mut self) {
+        self.write_pio_reg(ATA_REG_LBA0, 1);
+        self.write_pio_reg(ATA_REG_LBA1, 0);
+        self.write_pio_reg(ATA_REG_LBA2, 0);
+        self.write_pio_reg(ATA_REG_SECCOUNT0, 2);
+        self.write_pio_reg(ATA_REG_COMMAND, ATA_CMD_READ_PIO);
+        // err = self.read_pio_reg(ATA_REG_STATUS);
+        // klog!("ERR {:b} while on 0x{:x}", err, self.pio_reg_base[self.active_bus]);
+        for _ in 0..20000 {
+            self.read_pio_reg(ATA_REG_STATUS);
+        }
+
+        // let buffer = Box::new([0 as u8; 512]);
+        for _ in 0..512 {
+            kprint!("{}", self.read_pio_reg(ATA_REG_DATA) as char);
+        }
+        klog!("\nERR {:b}", self.read_pio_reg(ATA_REG_STATUS));
+
+    }
+
+    fn test_read_dma(&mut self) {
+
+        self.sel_channel(1, 0xa0);
+        // stop bus master
+        let mut com = self.read_dma_reg(DMA_COMMAND_PORT);
+        com &= !1;
+        self.write_dma_reg(DMA_COMMAND_PORT, com);
+        // Preparing PRDT
+        // Writing DMA PRDT address
+        let prdt_address;
+        unsafe {
+            klog!("PRDT Virtual  Address 0x{:x}", PRDT.array.as_ptr() as usize);
+            prdt_address = mapper::virt_to_phys_kernel(PRDT.array.as_ptr() as usize).unwrap();
+            klog!("PRDT Physical Address {:x}", prdt_address);
+            PRDT.array[0] = PRD { phys_addr: mapper::virt_to_phys_kernel(BUFFER.as_ptr() as usize).unwrap() as u32, bytes_count: 512, msb: 1<<15 };
+            self.write_dma_reg(DMA_PRDT_BASE, (prdt_address) as u8);
+            self.write_dma_reg(DMA_PRDT_BASE + 1, (prdt_address >> 8) as u8);
+            self.write_dma_reg(DMA_PRDT_BASE + 2, (prdt_address >> 16) as u8);
+            self.write_dma_reg(DMA_PRDT_BASE + 3, (prdt_address >> 24) as u8);
+        }
+
+        // Set command to read
+        let mut com = self.read_dma_reg(DMA_COMMAND_PORT);
+        com |= 1 << 3;
+        self.write_dma_reg(DMA_COMMAND_PORT, com);
+
+        // Clear interrupt error/interrupt bits
+        self.write_dma_reg(DMA_STATUS_PORT, 0b110);
+
+
+        // select drive
+        self.sel_channel(1, 0xa0);
+
+        // klog!("Status reg {:b}", self.read_dma_reg(0x2));
+        self.write_pio_reg(ATA_REG_LBA0, 1);
+        self.write_pio_reg(ATA_REG_LBA1, 0);
+        self.write_pio_reg(ATA_REG_LBA2, 0);
+        self.write_pio_reg(ATA_REG_SECCOUNT0, 1);
+        self.write_pio_reg(ATA_REG_COMMAND, ATA_CMD_READ_DMA);
+
+        // start bus master
+        let mut com = self.read_dma_reg(DMA_COMMAND_PORT);
+        com |= 1;
+        self.write_dma_reg(DMA_COMMAND_PORT, com);
+
+        for _ in 0..2000000 {
+            self.read_pio_reg(ATA_REG_STATUS);
+        }
+
+
+        let error = loop {
+            let status = self.read_dma_reg(DMA_STATUS_PORT);
+
+            if status & 1 << 1 != 0 {
+                klog!("Error while DMA read, status {:b}", status);
+                break true;
+            }
+            if status & 1 == 0 {
+                break false;
+            }
+
+        };
+
+        if error {
+            klog!("Error while DMA read");
+        }
+        else {
+            for i in 0..512 {
+                unsafe {kprint!("{}", BUFFER[i]);}
+            }
+            klog!("\n END OF TRANSMISSION");
+        }
+
     }
 
     pub fn probe_controller(pci_dev: &PCIDevice) -> Option<Box<IDEDev>> {
         klog!("Probing IDE controller");
 
-        let caps = pci_dev.h.progif;
+        let caps = pci_dev.header.progif;
+
+        klog!("IDE CAPS : {:b}", caps);
     // TODO hmmm I should probably return errors
         if caps & 1 != 0 || caps & 1 << 2 != 0 {
             panic!("IDE driver only supports compatibility mode");
         }
         if caps & 1 << 7 == 0 {
-            panic!("IDE driver needs bus mastering to function properly");
+            panic!("IDE driver needs bus mastering (DMA) to function properly");
         }
 
-        let mut dev: Box<IDEDev> = Box::new(IDEDev::default());
+        let mut dev: Box<IDEDev> = Box::new(IDEDev::new());
+
 
         // Check if there are drives connected
 
@@ -201,19 +315,24 @@ impl IDEDev {
         dev.pio_reg_base[1] = 0x170;
         dev.pio_control_base[1] = 0x376;
 
-        dev.dma_reg = pci_dev.get_bar(4).try_into().unwrap();
-        klog!("BAR0 0x{:x}", pci_dev.get_bar(0));
-        klog!("BAR1 0x{:x}", pci_dev.get_bar(1));
-        klog!("BAR2 0x{:x}", pci_dev.get_bar(2));
-        klog!("BAR3 0x{:x}", pci_dev.get_bar(3));
-        klog!("BAR4 0x{:x}", pci_dev.get_bar(4));
-
+        let source = pci_dev.get_bar(4);
+        // klog!("BAR4 {:x} {:b}", source, source);
+        let bar4 = (source & 0xFFFFFFFC) as u16;
+        // klog!("BAR4 {:x} {:b}", bar4, bar4);
+        // loop{}
+        dev.dma_reg_base[0] = bar4;
+        dev.dma_reg_base[1] = bar4 + 0x8;
         // channel 1 master/slave
-        dev.probe_disk(0, 0xA0);
-        dev.probe_disk(0, 0xB0);
-        // channel 2 master/slave
+        // dev.probe_disk(0, 0xA0);
+        // dev.probe_disk(0, 0xB0);
+        // // channel 2 master/slave
+        // dev.probe_disk(1, 0xA0);
+        // dev.probe_disk(1, 0xB0);
         dev.probe_disk(1, 0xA0);
-        dev.probe_disk(1, 0xB0);
+        
+        pci_dev.enable_busmaster();
+        // dev.test_read_pio();
+        dev.test_read_dma();
 
         Some(dev)
     }

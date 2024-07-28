@@ -109,13 +109,14 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 
     super::disable_interrupts();
     klog!("Disabling PIC");
-    pic::disable();
+    pic::setup();
+    // pic::disable();
 
-    klog!("Setup ACPI");
-    acpi::init().unwrap();
+    // klog!("Setup ACPI");
+    // acpi::init().unwrap();
 
-    klog!("Setup APIC timer");
-    apic::timer::init();
+    // klog!("Setup APIC timer");
+    // apic::timer::init();
 
 
     // // klog!("This is reload_segments's address {:p}", reload_segments as *const());
@@ -133,6 +134,9 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     use alloc::vec::Vec;
     use alloc::boxed::Box;
 
+    // TODO remove
+    super::enable_interrupts();
+
     let mut block_drivers: Vec<Box<dyn BlockDriver>> = Vec::new();
     for pci_dev in pci::get_devices() {
         match pci_dev.kind {
@@ -146,6 +150,7 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
             _ => {}
         }
     }
+
 
     loop{}
     // TODO not a clear way to init scheduler, should be in kmain

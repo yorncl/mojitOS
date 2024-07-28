@@ -1,5 +1,6 @@
 use super::context::Context;
 use super::paging::page_fault_handler;
+use crate::pic;
 use crate::{irq, klog, memory::vmm::mapper, x86::apic};
 use core::arch::asm;
 use core::ptr::addr_of;
@@ -59,18 +60,20 @@ pub unsafe extern "C" fn exception_handler(code: u32, err_code: u32) {
 
 #[no_mangle]
 pub unsafe extern "C" fn generic_handler(interrupt_code: u32) {
-    // klog!("Interrupt Irq={}", interrupt_code);
+    klog!("================> Interrupt Irq={} or {}", interrupt_code, interrupt_code - 32);
 
-    // Exception
-    if interrupt_code < 32 {
-        klog!("Exception not handled!");
-        loop{}
-    }
-    // Not Exception
-    else {
-        super::apic::end_of_interrupt();
+    pic::eoi(interrupt_code - 32);
+
+    // // Exception
+    // if interrupt_code < 32 {
+    //     klog!("Exception not handled!");
+    //     loop{}
+    // }
+    // // Not Exception
+    // else {
+        // super::apic::end_of_interrupt();
         irq::top_handlers(interrupt_code);
-    }
+    // }
 }
 
 #[no_mangle]

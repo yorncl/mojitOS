@@ -3,24 +3,6 @@ use super::io::port::{PCICONFIG_ADDRESS, PCICONFIG_DATA};
 use crate::klog;
 
 use core::ptr::addr_of_mut;
-#[allow(dead_code)]
-#[repr(u16)]
-enum Class {
-    // None
-    NoVga = 0x0,
-    // YesVga = 0x1,
-    // Mass storage
-    // SCSIBus = 0x10,
-    IDE = 0x11,
-    ATA = 0x15,
-    SATA = 0x16,
-}
-
-impl Default for Class {
-    fn default() -> Self {
-        Class::NoVga
-    }
-}
 
 #[allow(dead_code)]
 #[repr(C, packed)]
@@ -51,7 +33,7 @@ pub enum PCIType {
 #[allow(dead_code)]
 #[derive(Copy, Clone)]
 pub struct PCIDevice {
-    pub h: PCIHeader,
+    pub header: PCIHeader,
     pub bus_num: u8,
     pub dev_num: u8,
     pub fn_num: u8,
@@ -62,7 +44,7 @@ pub struct PCIDevice {
 impl PCIDevice {
     fn new(bus_num: u8, dev_num: u8, fn_num: u8) -> Self {
         PCIDevice {
-            h: PCIHeader::default(),
+            header: PCIHeader::default(),
             bus_num,
             dev_num,
             fn_num,
@@ -79,6 +61,18 @@ impl PCIDevice {
     pub fn set_bar(&self, index: u8, value: u32) {
         bus::write_reg(self.address, 0x10 + index * 4, value);
     }
+
+    pub fn enable_busmaster(&self) {
+
+        klog!("COmmand {:b}", {self.header.command});
+        let mut val = bus::read_reg(self.address, 0x4);
+        klog!("COmmand           {:b}", val);
+        val |= 1 << 2;
+        klog!("COmmand  new      {:b}", val);
+        bus::write_reg(self.address, 0x4, val);
+        val = bus::read_reg(self.address, 0x4);
+        klog!("COmmand after new {:b}", val);
+    }
 }
 
 impl core::fmt::Debug for PCIDevice {
@@ -89,7 +83,7 @@ impl core::fmt::Debug for PCIDevice {
         .field("fn", &self.fn_num)
         .field("kind", &self.kind);
         if let PCIType::Unclassified = self.kind {
-            r.field("class", &format_args!("0x{:x}", {self.h.class}));
+            r.field("class", &format_args!("0x{:x}", {self.header.class}));
         }
             r.finish()
     }
@@ -134,7 +128,7 @@ mod bus {
             if device_exist(bus_num, dev_num, fn_num) {
                 // New device
                 let mut new_dev = PCIDevice::new(bus_num, dev_num, fn_num);
-                new_dev.h = read_header(new_dev.address);
+                new_dev.header = read_header(new_dev.address);
 
                 investigate_device(&mut new_dev);
 
@@ -144,7 +138,7 @@ mod bus {
                 // Multi-function device
                 // bit 7 checks if this is a multi-funciton device
                 // if not break the loop
-                if new_dev.h.header_type & 0x80 == 0 {
+                if new_dev.header.header_type & 0x80 == 0 {
                     break;
                 }
             }
@@ -175,10 +169,10 @@ fn build_address(bus_num: u8, dev_num: u8, fn_num: u8, reg_off: u8) -> u32 {
 }
 
 fn investigate_device(dev: &mut PCIDevice) {
-    if {dev.h.header_type} & 0x3 != 0 {
-        panic!("Unimplemented PCI header type: {}", {dev.h.header_type});
+    if {dev.header.header_type} & 0x3 != 0 {
+        panic!("Unimplemented PCI header type: {}", {dev.header.header_type});
     }
-    match { dev.h.class } {
+    match { dev.header.class } {
         0x101 => {
             dev.kind = PCIType::IDE;
         }
@@ -211,23 +205,6 @@ pub fn collect_devices() {
         }
     }
 }
-
-pub fn init_drivers() {
-    unsafe {
-        for dev in PCI_DEVICES.iter() {
-            match dev.kind {
-                PCIType::IDE => {
-                    // block device register IDE
-                }
-                PCIType::Unclassified => todo!(),
-                PCIType::ATA => todo!(),
-                PCIType::SATA => todo!(),
-            }
-        }
-    }
-}
-
-use core::slice::Iter;
 
 // TODO PUT IN A CELL OR LOCK DO SOMETHING
 pub fn get_devices() -> &'static Vec<Rc<PCIDevice>> {
