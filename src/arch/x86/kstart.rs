@@ -1,6 +1,5 @@
 use super::paging;
-use crate::driver::{vga, pci_ide};
-use crate::fs::block::BlockDriver;
+use crate::driver::vga;
 use crate::x86::apic;
 use crate::x86::paging::ROUND_PAGE_UP;
 use crate::klog;
@@ -16,9 +15,6 @@ use crate::driver;
 use super::idt;
 use super::gdt;
 
-use super::pci;
-
-use core::arch::asm;
 
 use super::cpuid;
 use super::pic;
@@ -129,30 +125,6 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     // PS/2 keyboard
     driver::kbd::init().unwrap();
 
-    pci::collect_devices();
-
-    use alloc::vec::Vec;
-    use alloc::boxed::Box;
-
-    // TODO remove
-    super::enable_interrupts();
-
-    let mut block_drivers: Vec<Box<dyn BlockDriver>> = Vec::new();
-    for pci_dev in pci::get_devices() {
-        match pci_dev.kind {
-            pci::PCIType::IDE => {
-                // probe the controller
-                if let Some(drv) = pci_ide::IDEDev::probe_controller(&pci_dev) {
-                    klog!("IDE driver init");
-                    block_drivers.push(drv);
-                }
-            },
-            _ => {}
-        }
-    }
-
-
-    loop{}
     // TODO not a clear way to init scheduler, should be in kmain
     crate::kmain();
 }

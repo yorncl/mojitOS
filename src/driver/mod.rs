@@ -5,6 +5,7 @@ pub mod vga;
 pub mod kbd;
 pub mod timer;
 pub mod pci_ide;
+pub mod pci;
 
 pub trait DriverInterface {
     fn init() -> Result<(),()>;

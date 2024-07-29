@@ -9,7 +9,6 @@ pub mod timer;
 pub mod kstart;
 pub mod context;
 pub mod lock;
-pub mod pci;
 
 mod util;
 mod apic;

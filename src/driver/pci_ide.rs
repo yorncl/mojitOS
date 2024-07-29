@@ -1,6 +1,5 @@
-
 use crate::{io, kprint};
-use crate::arch::pci::PCIDevice;
+use crate::driver::pci::{PCIDevice, config::BarType};
 use crate::fs::block;
 use crate::klog;
 use crate::memory::vmm::mapper;
@@ -14,8 +13,6 @@ pub struct PRD  {
     msb: u16
 }
 
-use alloc::vec::Vec;
-
 pub struct IDEDev {
     // TODO allocate in DMA zone ideally
     pio_reg_base: [u16; 2],
@@ -26,7 +23,7 @@ pub struct IDEDev {
 
 impl block::BlockDriver for IDEDev {
 
-    fn read_block(&self, lba: usize) {
+    fn read_block(&self, _lba: usize) {
     }
 
 }
@@ -287,10 +284,9 @@ impl IDEDev {
 
     }
 
-    pub fn probe_controller(pci_dev: &PCIDevice) -> Option<Box<IDEDev>> {
+    pub fn probe_controller(pci_dev: &mut PCIDevice) -> Option<Box<IDEDev>> {
         klog!("Probing IDE controller");
-
-        let caps = pci_dev.header.progif;
+        let caps = pci_dev.config.progif;
 
         klog!("IDE CAPS : {:b}", caps);
     // TODO hmmm I should probably return errors
@@ -315,13 +311,13 @@ impl IDEDev {
         dev.pio_reg_base[1] = 0x170;
         dev.pio_control_base[1] = 0x376;
 
-        let source = pci_dev.get_bar(4);
-        // klog!("BAR4 {:x} {:b}", source, source);
-        let bar4 = (source & 0xFFFFFFFC) as u16;
-        // klog!("BAR4 {:x} {:b}", bar4, bar4);
-        // loop{}
-        dev.dma_reg_base[0] = bar4;
-        dev.dma_reg_base[1] = bar4 + 0x8;
+        klog!("Bar raw {:x}", pci_dev.config.get_bar_raw(4));
+        let base_addr = match pci_dev.config.get_bar(4) {
+            BarType::IO(val) => {val as u16},
+            BarType::MMIO(_val) => {panic!("Unsupported MMIO on PCI IDE controller")},
+        };
+        dev.dma_reg_base[0] = base_addr;
+        dev.dma_reg_base[1] = base_addr + 0x8;
         // channel 1 master/slave
         // dev.probe_disk(0, 0xA0);
         // dev.probe_disk(0, 0xB0);
@@ -330,7 +326,7 @@ impl IDEDev {
         // dev.probe_disk(1, 0xB0);
         dev.probe_disk(1, 0xA0);
         
-        pci_dev.enable_busmaster();
+        pci_dev.config.command.setf(0x4);
         // dev.test_read_pio();
         dev.test_read_dma();
 

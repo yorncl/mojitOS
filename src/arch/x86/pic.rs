@@ -24,14 +24,11 @@ enum ICW4 {
     SFNM = 0x10,        // Special fully nested (not)
 }
 
-use crate::klog;
-
-use super::apic::end_of_interrupt;
 fn pic_remap(offset1: i8, offset2: i8)
 {
     // save masks
-    let master_mask = io::inb(port::PICMASTERDATA);
-    let slave_mask = io::inb(port::PICSLAVEDATA);
+    // let master_mask = io::inb(port::PICMASTERDATA);
+    // let slave_mask = io::inb(port::PICSLAVEDATA);
 
     // klog!("PIC MASKS {:b} {:b}", master_mask, slave_mask);
     // loop{}

@@ -62,12 +62,34 @@ pub fn spawn_proc_1() {
 }
 
 
+use alloc::vec::Vec;
+use alloc::boxed::Box;
+use crate::fs::block::BlockDriver;
+
 pub fn kmain() -> !
 {
     #[cfg(test)]
     klog!("Hello from kmain");
     #[cfg(test)]
     test_main();
+
+    driver::pci::init();
+    // TODO remove
+    arch::enable_interrupts();
+
+    let mut block_drivers: Vec<Box<dyn BlockDriver>> = Vec::new();
+    for pci_dev in driver::pci::get_devices() {
+        match pci_dev.kind {
+            driver::pci::PCIType::IDE => {
+                // probe the controller
+                if let Some(drv) = driver::pci_ide::IDEDev::probe_controller(pci_dev) {
+                    klog!("IDE driver init");
+                    block_drivers.push(drv);
+                }
+            },
+            _ => {}
+        }
+    }
 
     fs::vfs::init();
     
