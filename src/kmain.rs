@@ -77,14 +77,14 @@ pub fn kmain() -> !
     // TODO remove
     arch::enable_interrupts();
 
-    let mut block_drivers: Vec<Box<dyn BlockDriver>> = Vec::new();
+    // let mut block_drivers: Vec<Box<dyn BlockDriver>> = Vec::new();
     for pci_dev in driver::pci::get_devices() {
         match pci_dev.kind {
             driver::pci::PCIType::IDE => {
                 // probe the controller
-                if let Some(drv) = driver::pci_ide::IDEDev::probe_controller(pci_dev) {
+                if let Some(drv) = driver::pci_ide::IDEController::probe_controller(pci_dev) {
                     klog!("IDE driver init");
-                    block_drivers.push(drv);
+                    // block_drivers.push(drv);
                 }
             },
             _ => {}

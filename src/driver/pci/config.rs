@@ -24,27 +24,20 @@ mod x86 {
         // configspace fields
         pub vendor: u16,
         pub dev_id: u16,
-
         pub command: PCICommand,
-
         pub rev_id: u8,
         pub progif: u8,
         pub class: u16,
         pub cache_line_size: u8,
         pub latency_timer: u8,
         pub header_type: u8,
-
-
         pub cardbus: u32,
         pub sub_vendor: u16,
         pub sub_system: u16,
         pub rom_base: u32,
-
         pub caps_ptr: u8,
-
         pub int_line: u8,
         pub int_pin: u8,
-
         pub min_grant: u8,
         pub max_latency: u8,
     }

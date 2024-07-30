@@ -28,9 +28,6 @@ pub struct PCIDevice {
     pub kind: PCIType
 }
 
-impl PCIDevice {
-}
-
 impl core::fmt::Debug for PCIDevice {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut r = f.debug_struct("PCIDevice");

@@ -1,5 +1,4 @@
 // Enumerate and identify the devices
-use core::ptr::addr_of_mut;
 use crate::arch::io;
 
 use super::{PCIDevice, PCIType, config::PCIEndpointConfig};
@@ -28,10 +27,7 @@ pub fn device_exist(bus_num: u8, dev_num: u8, fn_num: u8) -> bool {
     true
 }
 
-use crate::klog;
-
 fn identify_class(conf: &PCIEndpointConfig) -> PCIType {
-    klog!("HEre is the class: {:x}", conf.class );
     return match conf.class {
         0x101 => {
             PCIType::IDE
