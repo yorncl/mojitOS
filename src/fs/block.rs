@@ -59,14 +59,7 @@ struct MBR {
     magic: u16
 }
 
-fn parse_mbr(buffer: &[u8]) {
-    let mbr: &MBR = unsafe {&*(buffer.as_ptr() as *const MBR)};
-    for p in mbr.parts.iter() {
-        crate::klog!("======== PART");
-        crate::klog!("Part type {:x}", p.part_type);
-        crate::klog!("Part start {}", {p.lba_start});
-        crate::klog!("Part count {}", {p.seccount});
-    }
+impl MBR {
 }
 
 pub fn init() {
@@ -80,11 +73,26 @@ pub fn init() {
         for dev in BLOCKS_DEVS.iter_mut() {
             let d = dev.borrow_mut();
             // TODO fix why is the first instead of lba0 ? Do I need to setup the drive some way?
-            d.read_block(1, &mut buffer).unwrap();
+            d.read_block(0, &mut buffer).unwrap();
+            crate::klog!("==== MBR");
+            for i in 0..512 {
+                crate::kprint!("{:x}", buffer[i]);
+            }
+            crate::klog!("");
 
             // MBR partition
             if buffer[510] == 0x55 && buffer[511] == 0xAA {
-                parse_mbr(&buffer);
+                let mbr: &MBR = unsafe {&*(buffer.as_ptr() as *const MBR)};
+
+                let mut ext2 = [0 as u8; 512];
+                let dest = mbr.parts[1].lba_start as usize;
+                d.read_block(dest, &mut ext2).unwrap();
+
+                crate::klog!("==== FS HEADER, dest {}", dest);
+                for i in 0..512 {
+                    crate::kprint!("{:x}", ext2[i]);
+                }
+                crate::klog!("");
             }
         } 
     }

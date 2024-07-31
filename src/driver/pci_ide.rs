@@ -60,6 +60,11 @@ mod ata_macros {
 }
 use ata_macros::*;
 
+
+// The 3 are always 1, the middle one is to enable LBA addressing
+pub const IDE_DISK_MASTER: u8 = 0xE0; // 0b11100000
+pub const IDE_DISK_SLAVE: u8 = 0xF0; //  0b11110000
+
 #[repr(C, packed)]
 #[derive(Default, Copy, Clone)]
 pub struct PRD {
@@ -101,7 +106,8 @@ pub struct Bus {
     pub dma_command: Pio<u8>,
     pub dma_status: Pio<u8>,
     pub dma_prdt: [Pio<u8>; 4],
-    pub active_slot: u8,
+    // Remember if master or slave is active
+    pub active_drivesel: u8,
 
     // TODO locking
     pub disks: Vec<Rc<RefCell<IDEDisk>>>,
@@ -112,6 +118,8 @@ use core::cell::RefCell;
 pub struct IDEDiskInfo {
     pub model: [u8; 40],
     pub slot: u8,
+    // 28bit addressable sectors
+    pub seccount: u32,
 }
 pub struct IDEDisk {
     // TODO locking
@@ -123,7 +131,7 @@ impl block::BlockDriver for IDEDisk {
     fn read_block(&self, lba: usize, buffer: &mut [u8]) -> Result<(), ()> {
         let mut bus = self.bus.borrow_mut();
         bus.select_slot(self.info.slot);
-        bus.read_dma(lba as u8, buffer)?;
+        bus.read_dma(lba, buffer)?;
         Ok(())
     }
 }
@@ -131,7 +139,7 @@ impl block::BlockDriver for IDEDisk {
 impl Bus {
     pub fn new(iobase: u16, controlbase: u16, dmabase: u16) -> Self {
         Bus {
-            active_slot: 0,
+            active_drivesel: 0,
             // PIO regs
             data: Pio::new(iobase + ATA_REG_DATA),
             error: Pio::new(iobase + ATA_REG_ERROR),
@@ -158,7 +166,7 @@ impl Bus {
         }
     }
 
-    fn read_dma(&mut self, lba: u8, buffer: &mut [u8]) -> Result<(), ()> {
+    fn read_dma(&mut self, lba: usize, buffer: &mut [u8]) -> Result<(), ()> {
         let bus = &self;
         // stop bus master
         let mut com = bus.dma_command.read();
@@ -190,9 +198,9 @@ impl Bus {
         // Clear interrupt error/interrupt bits
         bus.dma_status.write(0b110);
 
-        bus.lba0.write(lba);
-        bus.lba1.write(0);
-        bus.lba2.write(0);
+        bus.lba0.write(lba as u8);
+        bus.lba1.write((lba >> 8) as u8);
+        bus.lba2.write((lba >> 16) as u8);
         bus.seccount.write(1);
         bus.command.write(ATA_CMD_READ_DMA);
 
@@ -244,7 +252,7 @@ impl Bus {
     }
 
     pub fn select_slot(&mut self, id: u8) {
-        self.active_slot = id;
+        self.active_drivesel = id;
         self.drive_select.write(id);
         self.wait();
     }
@@ -290,26 +298,31 @@ impl Bus {
             }
         }
 
-        // Collect identify response
+        // Collect IDENTIFY response
         let mut id_response: [u16; 256] = [0; 256];
         for i in 0..256 {
             id_response[i] = self.data.read();
         }
 
-        let mut disk = IDEDiskInfo {
+        let mut diskinfo = IDEDiskInfo {
             model: [0; 40],
-            slot: self.active_slot,
+            slot: self.active_drivesel,
+            seccount: (id_response[61] as u32) << 16 | id_response[60] as u32
         };
 
         // Parse and build Disck Structure
-        klog!("Parsing disk structure");
-        // check if DMA mode
         for i in 0..20 {
             let bytes = id_response[ATA_IDENT_MODEL / 2 + i];
-            disk.model[i * 2] = (bytes >> 8) as u8;
-            disk.model[i * 2 + 1] = bytes as u8;
+            diskinfo.model[i * 2] = (bytes >> 8) as u8;
+            diskinfo.model[i * 2 + 1] = bytes as u8;
         }
-        Some(disk)
+
+        // Check if lba 28 bit addressing is supported
+        if diskinfo.seccount == 0 {
+            // TODO drop the drive instead
+            panic!("Lba 28 mode not supported on IDE drive!");
+        }
+        Some(diskinfo)
     }
 }
 
@@ -388,7 +401,7 @@ impl IDEController {
         for bus in controller.buses.iter_mut() {
             // Master
             let mut b = bus.borrow_mut();
-            b.select_slot(0xA0);
+            b.select_slot(IDE_DISK_MASTER);
             if let Some(diskinfo) = b.probe() {
                 b.disks.push(Rc::new(RefCell::new(IDEDisk {
                     info: diskinfo,
@@ -397,7 +410,7 @@ impl IDEController {
             }
 
             // Slave
-            b.select_slot(0xB0);
+            b.select_slot(IDE_DISK_SLAVE);
             if let Some(diskinfo) = b.probe() {
                 b.disks.push(Rc::new(RefCell::new(IDEDisk {
                     info: diskinfo,
