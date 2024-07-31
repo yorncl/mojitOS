@@ -48,7 +48,8 @@ fn enumerate_functions(bus_num: u8, dev_num: u8) {
     for fn_num in 0..=8 {
         if device_exist(bus_num, dev_num, fn_num) {
 
-            let conf = PCIEndpointConfig::from_io_space(build_address(bus_num, dev_num, fn_num, 0));
+            let addr = build_address(bus_num, dev_num, fn_num, 0);
+            let conf = PCIEndpointConfig::from_io_space(addr);
 
             if conf.header_type & 0x3 != 0 {
                 panic!("Unimplemented PCI header type: {}", conf.header_type);

@@ -3,26 +3,8 @@ use crate::fs::block;
 use crate::io::{Pio, PortIO};
 use crate::klog;
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::cell::Cell;
-use core::str;
-
-#[repr(C, packed)]
-#[derive(Default, Copy, Clone)]
-pub struct PRD {
-    phys_addr: u32,
-    bytes_count: u16,
-    msb: u16,
-}
-
-pub struct IDEController {
-    // only two bus supported, sorry ATA/IDE/PATA afficionados
-    pub buses: [Bus; 2],
-}
-
-impl block::BlockDriver for IDEDisk {
-    fn read_block(&self, _lba: usize) {}
-}
 
 #[allow(dead_code)]
 mod ata_macros {
@@ -78,11 +60,23 @@ mod ata_macros {
 }
 use ata_macros::*;
 
-use alloc::boxed::Box;
+#[repr(C, packed)]
+#[derive(Default, Copy, Clone)]
+pub struct PRD {
+    phys_addr: u32,
+    bytes_count: u16,
+    msb: u16,
+}
 
 #[repr(align(4))]
 struct AlignedArray {
     array: [PRD; 512],
+}
+
+pub struct IDEController {
+    // only two bus supported, sorry ATA/IDE/PATA afficionados
+    // TODO Locking
+    pub buses: [Rc<RefCell<Bus>>; 2],
 }
 
 // One ATA bus, used to interact with two drives
@@ -108,11 +102,30 @@ pub struct Bus {
     pub dma_status: Pio<u8>,
     pub dma_prdt: [Pio<u8>; 4],
     pub active_slot: u8,
+
+    // TODO locking
+    pub disks: Vec<Rc<RefCell<IDEDisk>>>,
 }
 
-pub struct IDEDisk {
+use alloc::rc::Rc;
+use core::cell::RefCell;
+pub struct IDEDiskInfo {
     pub model: [u8; 40],
-    
+    pub slot: u8,
+}
+pub struct IDEDisk {
+    // TODO locking
+    info: IDEDiskInfo,
+    bus: Rc<RefCell<Bus>>,
+}
+
+impl block::BlockDriver for IDEDisk {
+    fn read_block(&self, lba: usize, buffer: &mut [u8]) -> Result<(), ()> {
+        let mut bus = self.bus.borrow_mut();
+        bus.select_slot(self.info.slot);
+        bus.read_dma(lba as u8, buffer)?;
+        Ok(())
+    }
 }
 
 impl Bus {
@@ -141,6 +154,92 @@ impl Bus {
                 Pio::new(dmabase + ATA_REG_DMA_PRDT + 2),
                 Pio::new(dmabase + ATA_REG_DMA_PRDT + 3),
             ],
+            disks: vec![],
+        }
+    }
+
+    fn read_dma(&mut self, lba: u8, buffer: &mut [u8]) -> Result<(), ()> {
+        let bus = &self;
+        // stop bus master
+        let mut com = bus.dma_command.read();
+        com &= !1;
+        bus.dma_command.write(com);
+        // Preparing PRDT
+        // Writing DMA PRDT address
+        let prdt_address;
+        unsafe {
+            klog!("PRDT Virtual  Address 0x{:x}", PRDT.array.as_ptr() as usize);
+            prdt_address = mapper::virt_to_phys_kernel(PRDT.array.as_ptr() as usize).unwrap();
+            klog!("PRDT Physical Address {:x}", prdt_address);
+            PRDT.array[0] = PRD {
+                phys_addr: mapper::virt_to_phys_kernel(BUFFER.as_ptr() as usize).unwrap() as u32,
+                bytes_count: 512,
+                msb: 1 << 15,
+            };
+            bus.dma_prdt[0].write(prdt_address as u8);
+            bus.dma_prdt[1].write((prdt_address >> 8) as u8);
+            bus.dma_prdt[2].write((prdt_address >> 16) as u8);
+            bus.dma_prdt[3].write((prdt_address >> 24) as u8);
+        }
+
+        // Set command to read
+        let mut com = bus.dma_command.read();
+        com |= 1 << 3;
+        bus.dma_command.write(com);
+
+        // Clear interrupt error/interrupt bits
+        bus.dma_status.write(0b110);
+
+        bus.lba0.write(lba);
+        bus.lba1.write(0);
+        bus.lba2.write(0);
+        bus.seccount.write(1);
+        bus.command.write(ATA_CMD_READ_DMA);
+
+        // start bus master
+        let mut com = bus.dma_command.read();
+        com |= 1;
+        bus.dma_command.write(com);
+
+        self.poll();
+        // TODO check for error
+        // need to read it after each operation
+        self.dma_status.read();
+
+        // TODO Hmm move somewhere else
+        let error = loop {
+            let status = bus.dma_status.read();
+
+            if status & 1 == 0 {
+                break false;
+            }
+            if status & 1 << 1 != 0 {
+                klog!("Error while DMA read, status {:b}", status);
+                break true;
+            }
+        };
+        if error {
+            klog!("Error while DMA read");
+            return Err(());
+        } else {
+            klog!("\n END OF TRANSMISSION");
+        }
+        // TODO most certainly very much garbage code
+        // Copy into before
+        for i in 0..512 {
+            unsafe { buffer[i] = BUFFER[i] }
+        }
+        Ok(())
+    }
+
+    fn poll(&self) {
+        loop {
+            let status = self.status.read();
+            // Check if not busy anymore
+            // TODO more extensive error checking
+            if status & 0x80 == 0 {
+                break;
+            }
         }
     }
 
@@ -158,7 +257,7 @@ impl Bus {
     }
 
     // TODO maybe deeper error management
-    pub fn probe(&mut self) -> Option<IDEDisk> {
+    pub fn probe(&mut self) -> Option<IDEDiskInfo> {
         // Preparing to send IDENTIFY command
         self.seccount.write(0);
         self.lba0.write(0);
@@ -197,7 +296,10 @@ impl Bus {
             id_response[i] = self.data.read();
         }
 
-        let mut disk = IDEDisk { model: [0; 40] };
+        let mut disk = IDEDiskInfo {
+            model: [0; 40],
+            slot: self.active_slot,
+        };
 
         // Parse and build Disck Structure
         klog!("Parsing disk structure");
@@ -222,103 +324,35 @@ static mut PRDT: AlignedArray = AlignedArray {
 
 static mut BUFFER: [u8; 512] = [0 as u8; 512];
 
-
 use crate::memory::vmm::mapper;
 
 #[allow(dead_code)]
 impl IDEController {
-    fn test_read_pio(bus: &mut Bus) {
-        bus.select_slot(0xA0);
-        bus.lba0.write(1);
-        bus.lba1.write(0);
-        bus.lba2.write(0);
-        bus.seccount.write(1);
-        bus.command.write(ATA_CMD_READ_PIO);
+    // TODO support PIO mode
+    // fn test_read_pio(bus: &mut Bus) {
+    //     bus.select_slot(0xA0);
+    //     bus.lba0.write(1);
+    //     bus.lba1.write(0);
+    //     bus.lba2.write(0);
+    //     bus.seccount.write(1);
+    //     bus.command.write(ATA_CMD_READ_PIO);
 
-        for _ in 0..20000 {
-            bus.status.read();
-        }
-        
-        let err = bus.status.read();
-        klog!("status {:b}", err);
-        if err & 0x1 != 0 {
-            klog!("ERR {:b}", err);
-            loop{}
-        }
+    //     for _ in 0..20000 {
+    //         bus.status.read();
+    //     }
 
-        for _ in 0..512 {
-            crate::kprint!("{}", bus.data.read());
-        }
-        klog!("\nERR {:b}", bus.status.read());
-    }
+    //     let err = bus.status.read();
+    //     klog!("status {:b}", err);
+    //     if err & 0x1 != 0 {
+    //         klog!("ERR {:b}", err);
+    //         loop {}
+    //     }
 
-    fn test_read_dma(bus: &mut Bus) {
-
-        // stop bus master
-        let mut com = bus.dma_command.read();
-        com &= !1;
-        bus.dma_command.write(com);
-        // Preparing PRDT
-        // Writing DMA PRDT address
-        let prdt_address;
-        unsafe {
-            klog!("PRDT Virtual  Address 0x{:x}", PRDT.array.as_ptr() as usize);
-            prdt_address = mapper::virt_to_phys_kernel(PRDT.array.as_ptr() as usize).unwrap();
-            klog!("PRDT Physical Address {:x}", prdt_address);
-            PRDT.array[0] = PRD { phys_addr: mapper::virt_to_phys_kernel(BUFFER.as_ptr() as usize).unwrap() as u32, bytes_count: 512, msb: 1<<15 };
-            bus.dma_prdt[0].write(prdt_address as u8);
-            bus.dma_prdt[1].write((prdt_address >> 8) as u8);
-            bus.dma_prdt[2].write((prdt_address >> 16) as u8);
-            bus.dma_prdt[3].write((prdt_address >> 24) as u8);
-        }
-
-        // Set command to read
-        let mut com = bus.dma_command.read();
-        com |= 1 << 3;
-        bus.dma_command.write(com);
-
-        // Clear interrupt error/interrupt bits
-        bus.dma_status.write(0b110);
-
-        bus.lba0.write(1);
-        bus.lba1.write(0);
-        bus.lba2.write(0);
-        bus.seccount.write(1);
-        bus.command.write(ATA_CMD_READ_DMA);
-
-        // start bus master
-        let mut com = bus.dma_command.read();
-        com |= 1;
-        bus.dma_command.write(com);
-
-        for _ in 0..2000000 {
-            bus.status.read();
-        }
-
-        let error = loop {
-            let status = bus.dma_status.read();
-
-            if status & 1 << 1 != 0 {
-                klog!("Error while DMA read, status {:b}", status);
-                break true;
-            }
-            if status & 1 == 0 {
-                break false;
-            }
-
-        };
-
-        if error {
-            klog!("Error while DMA read");
-        }
-        else {
-            for i in 0..512 {
-                unsafe {crate::kprint!("{}", BUFFER[i]);}
-            }
-            klog!("\n END OF TRANSMISSION");
-        }
-
-    }
+    //     for _ in 0..512 {
+    //         crate::kprint!("{}", bus.data.read());
+    //     }
+    //     klog!("\nERR {:b}", bus.status.read());
+    // }
 
     pub fn probe_controller(pci_dev: &mut PCIDevice) -> Option<Box<IDEController>> {
         // Extracting info from the PCI config
@@ -330,7 +364,6 @@ impl IDEController {
         if caps & 1 << 7 == 0 {
             panic!("IDE driver needs bus mastering (DMA) to function properly");
         }
-        klog!("Bar raw {:x}", pci_dev.config.get_bar_raw(4));
         let dma_base = match pci_dev.config.get_bar(4) {
             BarType::IO(val) => val as u16,
             BarType::MMIO(_val) => {
@@ -338,50 +371,43 @@ impl IDEController {
             }
         };
 
-        let mut controller: Box<IDEController> = Box::new(IDEController {
-            buses: [
-                Bus::new(0x1f0, 0x3f6, dma_base),
-                Bus::new(0x170, 0x376, dma_base + 0x8),
-            ],
-        });
-        // Check if there are drives connected
-
         // Compatibility mode defaults IO ports base
+        // Setting up the 2 buses with default value
         // I put my trust in god almighty and the osdev wiki
         // Amen
-        // Setting up the 2 channels with default value
+        let mut controller: Box<IDEController> = Box::new(IDEController {
+            buses: [
+                Rc::new(RefCell::new(Bus::new(0x1f0, 0x3f6, dma_base))),
+                Rc::new(RefCell::new(Bus::new(0x170, 0x376, dma_base + 0x8))),
+            ],
+        });
 
         // TODO locking
-        let mut disks: Vec<Cell<IDEDisk>> = vec![];
 
+        // Check if there are drives connected
         for bus in controller.buses.iter_mut() {
             // Master
-            bus.select_slot(0xA0);
-            if let Some(disk) = bus.probe() {
-                disks.push(Cell::new(disk));
+            let mut b = bus.borrow_mut();
+            b.select_slot(0xA0);
+            if let Some(diskinfo) = b.probe() {
+                b.disks.push(Rc::new(RefCell::new(IDEDisk {
+                    info: diskinfo,
+                    bus: bus.clone(),
+                })));
             }
 
             // Slave
-            bus.select_slot(0xB0);
-            if let Some(disk) = bus.probe() {
-                disks.push(Cell::new(disk));
+            b.select_slot(0xB0);
+            if let Some(diskinfo) = b.probe() {
+                b.disks.push(Rc::new(RefCell::new(IDEDisk {
+                    info: diskinfo,
+                    bus: bus.clone(),
+                })));
             }
         }
 
-        for d in disks.iter_mut() {
-            klog!(
-                "Identifier: '{}'",
-                str::from_utf8(&d.get_mut().model).unwrap()
-            );
-        }
-        // TODO enable bustmatering
+        // enabling bustmatering
         pci_dev.config.command.setf(0x4);
-        
-        let test_bus = &mut controller.buses[1];
-        test_bus.select_slot(0xA0);
-
-        // Self::test_read_pio(test_bus);
-        Self::test_read_dma(test_bus);
         Some(controller)
     }
 }

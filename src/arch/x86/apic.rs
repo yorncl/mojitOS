@@ -105,7 +105,7 @@ pub fn enable_ioapic_interrupts() {
     // TODO handle the destination correctly
     klog!("LAPIC id {:x}", id);
 
-
+    // TODO reserve ISA IRQs
     ioapic_write_reg(0x12, 42);
 
     // setting 11th bit of apic base to enable apic TODO sould be done

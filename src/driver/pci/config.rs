@@ -4,7 +4,7 @@
 // This trait represents the inerface for all archs
 #[allow(dead_code)]
 mod x86 {
-        
+
     use crate::arch::io;
     use crate::arch::io::port::{PCICONFIG_ADDRESS, PCICONFIG_DATA};
 
@@ -12,7 +12,7 @@ mod x86 {
         // 4 bytes aligned
         IO(u32),
         // 16 bytes aligned
-        MMIO(u32)
+        MMIO(u32),
     }
 
     // R/W PCI configspace interface
@@ -35,7 +35,7 @@ mod x86 {
         pub sub_vendor: u16,
         pub sub_system: u16,
         pub rom_base: u32,
-        pub caps_ptr: u8,
+        pub caps: Option<Caps>,
         pub int_line: u8,
         pub int_pin: u8,
         pub min_grant: u8,
@@ -60,14 +60,17 @@ mod x86 {
     // Read the full 32 bit registers and extracts the field corresponding to the index
     macro_rules! read_field {
         ($base: expr, $offset: expr, $t: ty) => {
-            (read_reg($base, ($offset as u32) & !0b11) >> ((($offset as u32) & 0b11) * 8)) as $t 
+            (read_reg($base, ($offset as u32) & !0b11) >> ((($offset as u32) & 0b11) * 8)) as $t
         };
     }
 
     // TODO do a new pass on this module
     // My heart ache, having to pass the base address once again
     #[derive(Default, Copy, Clone)]
-    pub struct PCICommand {base: u32, value: u16}
+    pub struct PCICommand {
+        base: u32,
+        value: u16,
+    }
 
     // TODO something something bitflags something something bloat
     // might make it a more general type for other fields if needed
@@ -79,29 +82,63 @@ mod x86 {
 
         #[inline]
         pub fn setf(&mut self, flag: u32) {
-            write_reg(
-                self.base,
-                0x4,
-                read_reg(self.base, 0x4) | flag) ;
+            write_reg(self.base, 0x4, read_reg(self.base, 0x4) | flag);
         }
 
         #[inline]
         pub fn unsetf(&mut self, flag: u32) {
-            write_reg(
-                self.base,
-                0x4,
-                read_reg(self.base, 0x4) & !flag) ;
+            write_reg(self.base, 0x4, read_reg(self.base, 0x4) & !flag);
+        }
+    }
+
+    // Current capability, pointed by the base value for the io reg
+    // TODO should I worry about memory mapping instead ?
+    #[derive(Copy, Clone)]
+    pub struct Caps {
+        base: u32,
+    }
+
+    impl Caps {
+        pub fn id(&self) -> u8 {
+            read_field!(self.base, 0x0, u8)
+        }
+    }
+
+    // Small iterator interface on the capabilities
+    impl Iterator for Caps {
+        type Item = Caps;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.base == 0 {
+                return None;
+            }
+            self.base = read_field!(self.base, 0x1, u8) as u32;
+            Some(*self)
         }
     }
 
     impl PCIEndpointConfig {
-
         pub fn from_io_space(base: u32) -> Self {
+            // reg offset must be 0
+            assert!(base & 0xff == 0);
+            let mut caps = Caps { base: 0 };
+            // Checking bit 4 of status
+            let status = read_field!(base, 0x6, u16);
+            // crate::klog!("YEEEEEEEEEEEEEEEEEEEEEEEEEEEEES : {:b}", status);
+            if status & (1 << 5) != 0 {
+                caps.base = read_field!(base, 0x34, u8) as u32;
+            } else {
+                Caps { base: 0 };
+            }
+
             PCIEndpointConfig {
                 base,
                 vendor: read_field!(base, 0x0, u16),
                 dev_id: read_field!(base, 0x2, u16),
-                command: PCICommand{base, value: read_field!(base, 0x4, u16)},
+                command: PCICommand {
+                    base,
+                    value: read_field!(base, 0x4, u16),
+                },
                 rev_id: read_field!(base, 0x8, u8),
                 progif: read_field!(base, 0x9, u8),
                 class: read_field!(base, 0xA, u16),
@@ -112,7 +149,7 @@ mod x86 {
                 sub_vendor: read_field!(base, 0x2C, u16),
                 sub_system: read_field!(base, 0x2E, u16),
                 rom_base: read_field!(base, 0x30, u32),
-                caps_ptr: read_field!(base, 0x4, u8),
+                caps: Some(caps),
                 int_line: read_field!(base, 0x3C, u8),
                 int_pin: read_field!(base, 0x3D, u8),
                 min_grant: read_field!(base, 0x3E, u8),
@@ -123,7 +160,15 @@ mod x86 {
         pub fn status(&self) -> u16 {
             read_field!(self.base, 0x6, u16)
         }
-        
+
+        // TODO thought I needed this now, probably will need it later
+        pub fn setup_msi(&self) {
+            for c in self.caps.into_iter() {
+                crate::klog!("Caps base: 0x{:x}, id: {:x}", c.base, c.id());
+            }
+            loop {}
+        }
+
         // TODO
         // fn get_bist() {}
         // fn set_bist() {}
@@ -134,7 +179,7 @@ mod x86 {
                 BarType::IO(val & !0b11)
             } else {
                 BarType::MMIO(val & !0b111)
-            }
+            };
         }
 
         pub fn get_bar_raw(&self, i: u32) -> u32 {
@@ -144,5 +189,3 @@ mod x86 {
 }
 #[cfg(target_arch = "x86")]
 pub use x86::*;
-
-

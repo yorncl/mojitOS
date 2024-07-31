@@ -64,7 +64,7 @@ pub fn spawn_proc_1() {
 
 use alloc::vec::Vec;
 use alloc::boxed::Box;
-use crate::fs::block::BlockDriver;
+use fs::block;
 
 pub fn kmain() -> !
 {
@@ -77,21 +77,29 @@ pub fn kmain() -> !
     // TODO remove
     arch::enable_interrupts();
 
-    // let mut block_drivers: Vec<Box<dyn BlockDriver>> = Vec::new();
     for pci_dev in driver::pci::get_devices() {
         match pci_dev.kind {
+            // ATA/IDE
             driver::pci::PCIType::IDE => {
                 // probe the controller
                 if let Some(drv) = driver::pci_ide::IDEController::probe_controller(pci_dev) {
-                    klog!("IDE driver init");
-                    // block_drivers.push(drv);
+                    // Register block devices from detected ATA disks if any
+                    for b in drv.buses {
+                        for disk in b.borrow_mut().disks.iter() {
+                            klog!("Some DRIVER IDE");
+                            block::register_device(disk.clone());
+                        }
+                    }
                 }
             },
             _ => {}
         }
     }
 
-    fs::vfs::init();
+    // Will panic if no block devices detected
+    block::init();
+
+    // fs::vfs::init();
     
 //     schedule::init();
 //     schedule::new_kernel_thread(spawn_proc_0);

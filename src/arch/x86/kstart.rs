@@ -105,18 +105,16 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 
     super::disable_interrupts();
     klog!("Disabling PIC");
-    pic::setup();
-    // pic::disable();
+    // pic::setup();
+    pic::disable();
 
-    // klog!("Setup ACPI");
-    // acpi::init().unwrap();
+    // TODO this sets up the APIC behind the scene, make it more transparent
+    klog!("Setup ACPI");
+    acpi::init().unwrap();
 
     // klog!("Setup APIC timer");
     // apic::timer::init();
 
-
-    // // klog!("This is reload_segments's address {:p}", reload_segments as *const());
-    // klog!("CPU mode: {}", get_cpu_mode());
     gdt::load();
     klog!("GDT loaded");
     idt::setup();
