@@ -128,11 +128,19 @@ pub struct IDEDisk {
 }
 
 impl block::BlockDriver for IDEDisk {
-    fn read_block(&self, lba: usize, buffer: &mut [u8]) -> Result<(), ()> {
+    fn read(&self, lba: usize, buffer: &mut [u8]) -> Result<(), ()> {
         let mut bus = self.bus.borrow_mut();
+
         bus.select_slot(self.info.slot);
-        bus.read_dma(lba, buffer)?;
+        // TODO optimize to DMA more than 512 bytes at a time
+        for chunk in buffer.chunks_mut(512) {
+            bus.read_dma(lba.try_into().unwrap(), chunk)?;
+        }
         Ok(())
+    }
+
+    fn sector_size(&self) -> usize {
+        todo!()
     }
 }
 
@@ -166,7 +174,11 @@ impl Bus {
         }
     }
 
-    fn read_dma(&mut self, lba: usize, buffer: &mut [u8]) -> Result<(), ()> {
+    fn read_dma(&mut self, lba: u32, buffer: &mut [u8]) -> Result<(), ()> {
+        if (lba >> 28) > 0 {
+            // TODO better error managemetn
+            return Err(())
+        }
         let bus = &self;
         // stop bus master
         let mut com = bus.dma_command.read();
@@ -198,9 +210,15 @@ impl Bus {
         // Clear interrupt error/interrupt bits
         bus.dma_status.write(0b110);
 
+        // Writing the 28 bit logical address
+        // lowe 24 bits
         bus.lba0.write(lba as u8);
         bus.lba1.write((lba >> 8) as u8);
         bus.lba2.write((lba >> 16) as u8);
+
+        bus.drive_select.write(bus.drive_select.read() | (lba >> 24) as u8);
+
+
         bus.seccount.write(1);
         bus.command.write(ATA_CMD_READ_DMA);
 

@@ -14,6 +14,8 @@ mkfs ext2 /dev/sda2
 
 mount /dev/sda2 /
 mkdir /boot
+mkdir /home
+mkdir /home/yrn
 mount /dev/sda1 /boot
 grub-install / /dev/sda
 
