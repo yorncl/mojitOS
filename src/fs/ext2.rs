@@ -1,6 +1,7 @@
 use super::block::BlockDriver;
 
 #[repr(C, packed)]
+#[derive(Copy, Clone)]
 pub struct SuperBlock {
     total_inodes: u32,
     total_blocks: u32,
@@ -34,10 +35,11 @@ pub struct SuperBlock {
 // Compile time checks to ensure correct size of structures
 const _: [u8; 84] = [0 as u8; core::mem::size_of::<SuperBlock>()];
 
-use super::fs;
+use super::vfs::{self, Filesystem};
 
 pub struct Ext2 {
-    info: fs::Info,
+    info: vfs::Info,
+    sb: SuperBlock,
     driver: Rc<RefCell<dyn BlockDriver>>,
 }
 
@@ -55,10 +57,36 @@ impl Ext2 {
 //     }
 }
 
-impl fs::Filesystem for Ext2 {
+// macro_rules! block_inode {
+//     ($inode) => {
+//           self.sb.  
+//     };
+// }
+use crate::klog;
+
+impl Ext2 {
+    pub fn get_block_group(&self, index: usize) {
+        klog!("total : {}", {self.sb.total_blocks});
+        klog!("per group : {}", {self.sb.blocks_per_group});
+        klog!("n block groups : {}", self.sb.total_blocks / self.sb.blocks_per_group);
+    }
 }
 
-impl fs::FilesystemInit for Ext2 {
+impl Filesystem for Ext2 {
+    fn get_root(&self) -> Result<vfs::Inode, ()> {
+        let rootindex = 2;
+        let bgi = (rootindex - 1) /self.sb.inodes_per_group as usize;
+
+        let mut buffer = [0 as u8; 512];
+
+        self.get_block_group(bgi);
+        // self.driver.borrow().read(0, );
+        // self.driver.borrow().read();
+        Err(())
+    }
+}
+
+impl vfs::FilesystemInit for Ext2 {
     fn match_superblock(buffer: &[u8]) -> bool {
         let sb = unsafe { &*(buffer.as_ptr() as *const SuperBlock) };
         sb.ext2_signature == 0xef53
@@ -68,7 +96,7 @@ impl fs::FilesystemInit for Ext2 {
         abs_lba_start: usize,
         abs_lba_super: usize,
         driver: &Rc<RefCell<dyn BlockDriver>>,
-    ) -> Result<RefCell<Box<Ext2>>, ()> {
+    ) -> Result<Rc<RefCell<Ext2>>, ()> {
         let mut buffer = [0 as u8; 512];
         // Read the superblock
         //
@@ -88,21 +116,15 @@ impl fs::FilesystemInit for Ext2 {
             return Err(())
         }
 
-        let fs = Box::new(Ext2 {
-            info: fs::Info {
+        let fs = RefCell::new(Ext2 {
+            info: vfs::Info {
                 lba_offset: {sb.superblock_index} as usize,
                 block_size: 1024 << {sb.block_size_log2},
             },
+            sb: sb.clone(),
             driver: driver.clone(),
         });
 
-
-        crate::klog!("{}", abs_lba_start);
-        crate::klog!("{}", abs_lba_super);
-        crate::klog!("{}", {sb.block_size_log2});
-        crate::klog!("{}", {sb.total_inodes});
-        crate::klog!("{}", {sb.free_inodes});
-
-        Ok(RefCell::new(fs))
+        Ok(Rc::new(fs))
     }
 }

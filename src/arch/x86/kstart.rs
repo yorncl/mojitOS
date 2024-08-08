@@ -89,20 +89,6 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     let memstart = ROUND_PAGE_UP!(kend);
     vmm::init(memstart, super::KERNEL_PAGE_TABLES_START - kend);
 
-
-    // let a = alloc::string::String::from("Moi je suis en pleine forme");
-    // let _vec_test = vec![1;100];
-    // {
-    //     let _vec_test2 = vec![1;100];
-    //     let b = alloc::string::String::from("Bonjour tout le monde");
-    //     klog!("{}", b);
-    // }
-    // klog!("{}", a);
-    // for i in 0..10 {
-    //     klog!("{:x}", _vec_test[i]);
-    // }
-
-
     super::disable_interrupts();
     klog!("Disabling PIC");
     // pic::setup();
@@ -113,7 +99,7 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     acpi::init().unwrap();
 
     // klog!("Setup APIC timer");
-    // apic::timer::init();
+    apic::timer::init();
 
     gdt::load();
     klog!("GDT loaded");
@@ -123,6 +109,5 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     // PS/2 keyboard
     driver::kbd::init().unwrap();
 
-    // TODO not a clear way to init scheduler, should be in kmain
     crate::kmain();
 }

@@ -12,11 +12,12 @@ pub struct Info {
     pub block_size: usize,
 }
 
-enum Error {
+pub enum Error {
     DONTWANNA,
 }
 
 #[repr(u8)]
+#[allow(dead_code)]
 enum InodeType {
     FIFO,
     Char,
@@ -42,13 +43,13 @@ pub trait FilesystemInit {
         abs_lba_start: usize,
         abs_lba_super: usize,
         driver: &Rc<RefCell<dyn BlockDriver>>,
-    ) -> Result<RefCell<Box<Self>>, ()>;
+    ) -> Result<Rc<RefCell<Self>>, ()>;
 }
 
 // Every filestystem will expose this API
 // It is the interface between them and the VFS layer
 pub trait Filesystem {
-    fn get_root(&self) -> Inode;
+    fn get_root(&self) -> Result<Inode, ()>;
     // Reads the superblock and check magic number
 
     // fn open(&self, path: &str) -> Result<Inode, Error> {
@@ -56,6 +57,16 @@ pub trait Filesystem {
     // fn open_dir(&self, path: &str) -> Result<Inode, Error> {
     // }
     // fn write_block() -> Result<(),()> {}
+}
+
+
+// TODO refactor to be more efficient
+// optimize heap access, like a pointer ?
+type FsVec = Vec<Rc<RefCell<dyn Filesystem>>>;
+use alloc::vec::Vec;
+static mut FILESYSTEMS: FsVec = vec![];
+pub fn get_filesystems() -> &'static mut FsVec {
+    unsafe {&mut FILESYSTEMS}
 }
 
 pub struct Filed {}
@@ -82,18 +93,18 @@ pub fn path_walk(path: &str) -> Result<Inode, Error> {
 }
 
 // Takes the root filesystem
-pub fn vfs_mount_kern_root(rootfs: &Rc<RefCell<dyn Filesystem>>) -> Result<(), Error> {
+pub fn mount_kern_root(rootfs: &Rc<RefCell<dyn Filesystem>>) -> Result<(), Error> {
     unsafe {
-        KERN_ROOT_INODE = rootfs.borrow().get_root();
+        KERN_ROOT_INODE = rootfs.borrow().get_root().unwrap();
     }
     Ok(())
 }
 
-pub fn vfs_open(path: &str) -> Result<Filed, Error> {
+pub fn open(path: &str) -> Result<Filed, Error> {
     Err(Error::DONTWANNA)
 }
 
-pub fn vfs_opendir() -> Result<Dird, Error> {
+pub fn opendir() -> Result<Dird, Error> {
     Err(Error::DONTWANNA)
 }
 

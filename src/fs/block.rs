@@ -12,23 +12,11 @@ pub fn get_devices() -> &'static Vec<Rc<RefCell<dyn BlockDriver>>> {
     unsafe { &BLOCKS_DEVS }
 }
 
-// enum DiskScheme {
-//     MBR,
-//     GPT
-// }
-
-// pub fn inspect_scheme(disk: &dyn BlockDriver) {
-//     disk.read_block(0, buffer)
-// }
-
-// pub fn collect_partitions() {
-// }
-
 use alloc::rc::Rc;
 use core::cell::RefCell;
 
-use super::ext2;
-use super::fs::FilesystemInit;
+use super::{ext2, vfs};
+use super::vfs::FilesystemInit;
 
 pub fn register_device(dev: Rc<RefCell<dyn BlockDriver>>) {
     unsafe {
@@ -91,7 +79,12 @@ pub fn init_fs_from_devices() {
                 }
 
                 if ext2::Ext2::match_superblock(&superblock) {
-                    ext2::Ext2::init(dest, dest + 2, &dev).unwrap();
+                    match ext2::Ext2::init(dest, dest + 2, &dev) {
+                        Ok(val) => {
+                            vfs::get_filesystems().push(val);
+                        },
+                        Err(()) => { continue }
+                    }
                 }
             }
         }

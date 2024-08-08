@@ -188,9 +188,7 @@ impl Bus {
         // Writing DMA PRDT address
         let prdt_address;
         unsafe {
-            klog!("PRDT Virtual  Address 0x{:x}", PRDT.array.as_ptr() as usize);
             prdt_address = mapper::virt_to_phys_kernel(PRDT.array.as_ptr() as usize).unwrap();
-            klog!("PRDT Physical Address {:x}", prdt_address);
             PRDT.array[0] = PRD {
                 phys_addr: mapper::virt_to_phys_kernel(BUFFER.as_ptr() as usize).unwrap() as u32,
                 bytes_count: 512,
@@ -247,8 +245,6 @@ impl Bus {
         if error {
             klog!("Error while DMA read");
             return Err(());
-        } else {
-            klog!("\n END OF TRANSMISSION");
         }
         // TODO most certainly very much garbage code
         // Copy into before

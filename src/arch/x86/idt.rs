@@ -60,7 +60,7 @@ pub unsafe extern "C" fn exception_handler(code: u32, err_code: u32) {
 
 #[no_mangle]
 pub unsafe extern "C" fn generic_handler(interrupt_code: u32) {
-    klog!("================> Interrupt Irq={} or {}", interrupt_code, interrupt_code - 32);
+    // klog!("================> Interrupt Irq={} or {}", interrupt_code, interrupt_code - 32);
 
     // pic::eoi(interrupt_code - 32);
 

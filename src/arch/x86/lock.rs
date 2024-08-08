@@ -1,39 +1,39 @@
 use core::arch::asm;
-use core::mem;
+// use core::mem;
 use core::ptr::addr_of;
 
-static mut THELOCK: u32 = 0;
+// static mut THELOCK: u32 = 0;
 
-
-pub const TAKEN: u32 = 1;
-pub const FREE: u32 = 0;
-
-#[no_mangle]
-pub fn swap_atomic (order: u32) -> bool {
-    let mut value = order;
-    unsafe {
-        asm!(
-            "xchg {input},[{lock}]",
-            lock = in(reg) addr_of!(THELOCK) as usize,
-            input = inout(reg) value
-        );
-    }
-    if value == order {
-        return false
-    }
-    true
+pub struct SpinLock {
+    state: usize
 }
 
-pub fn spin_lock() {
-    unsafe {
-        while swap_atomic(TAKEN) == false {
+impl SpinLock {
+
+    pub fn new() -> SpinLock {
+        SpinLock {state: 0}
+    }
+
+    fn exchange(&mut self, order: usize) -> bool {
+        let mut value = order;
+        unsafe {
+            asm!(
+                "lock xchg {input},[{lock}]",
+                lock = in(reg) addr_of!(self.state) as usize,
+                input = inout(reg) value
+            );
         }
+        value == order
+    }
+
+    pub fn lock(&mut self) {
+            while self.exchange(1) {
+            }
+    }
+
+    pub fn release(&mut self) {
+            self.exchange(0);
     }
 }
 
-pub fn spin_release() {
-    unsafe {
-        swap_atomic(FREE);
-    }
-}
 
