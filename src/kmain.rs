@@ -22,7 +22,7 @@ mod utils;
 // include architecure specific code
 pub use arch::*;
 
-use crate::proc::schedule;
+use crate::proc::schedule::{self, schedule};
 
 #[cfg(test)]
 pub fn test_runner(tests: &[&dyn Fn()]) {
@@ -56,11 +56,7 @@ pub fn spawn_proc_1() {
     }
 }
 
-use alloc::boxed::Box;
-use alloc::vec::Vec;
-use fs::block;
-
-use crate::arch::lock::SpinLock;
+use crate::fs::block;
 
 pub fn kmain() -> ! {
     #[cfg(test)]
@@ -68,44 +64,51 @@ pub fn kmain() -> ! {
     #[cfg(test)]
     test_main();
 
-    // driver::pci::init();
 
-    // for pci_dev in driver::pci::get_devices() {
-    //     match pci_dev.kind {
-    //         // ATA/IDE
-    //         driver::pci::PCIType::IDE => {
-    //             // probe the controller
-    //             if let Some(drv) = driver::pci_ide::IDEController::probe_controller(pci_dev) {
-    //                 // Register block devices from detected ATA disks if any
-    //                 for b in drv.buses {
-    //                     for disk in b.borrow_mut().disks.iter() {
-    //                         klog!("Some DRIVER IDE");
-    //                         block::register_device(disk.clone());
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         _ => {}
-    //     }
-    // }
+    driver::pci::init();
 
-    // // Will panic if no block have been registered
-    // block::init_fs_from_devices();
+    for pci_dev in driver::pci::get_devices() {
+        match pci_dev.kind {
+            // ATA/IDE
+            driver::pci::PCIType::IDE => {
+                // probe the controller
+                if let Some(drv) = driver::pci_ide::IDEController::probe_controller(pci_dev) {
+                    // Register block devices from detected ATA disks if any
+                    for bus_lock in drv.buses {
+                        let bus = bus_lock.read().unwrap();
 
-    // // ata1hd0part1
-    // // let part = 0x0100;
+                        let disks = bus.disks.read().unwrap();
+                        for d in disks.iter() {
+                            klog!("Some DRIVER IDE");
+                            block::register_device(d.clone());
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }    
 
-    // let fss = fs::vfs::get_filesystems();
+    // Will panic if no block have been registered
+    block::init_fs_from_devices();
 
-    // if fss.len() > 1 {
-    //     panic!("Don't know how to choose vfs root!");
-    // }
-    // fs::vfs::mount_kern_root(&fss[0]);
+    // TODO id system for partition, kernel boot arg, something like ata1hd0part1
+    // let part = 0x0100;
 
-    // arch::enable_interrupts();
+    let fss = fs::vfs::get_filesystems();
+    if fss.len() > 1 {
+        panic!("Don't know how to choose vfs root!");
+    }
+    // fs::vfs::mount_kern_root(fss[0].clone());
+
+    irq::print_handlers();
     schedule::init();
+    irq::print_handlers();
     schedule::new_kernel_thread(spawn_proc_0);
-    schedule::new_kernel_thread(spawn_proc_1);
+    // schedule::new_kernel_thread(spawn_proc_1);
+    irq::print_handlers();
+    klog!("================== ENABLING INTERRUPTS");
+    klog!("================== ENABLING INTERRUPTS");
     arch::enable_interrupts();
     loop {}
 }

@@ -2,7 +2,9 @@ use crate::driver::pci::{config::BarType, PCIDevice};
 use crate::fs::block;
 use crate::io::{Pio, PortIO};
 use crate::klog;
+use crate::klib::lock::RwLock;
 
+use alloc::sync::Arc;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
@@ -60,7 +62,6 @@ mod ata_macros {
 }
 use ata_macros::*;
 
-
 // The 3 are always 1, the middle one is to enable LBA addressing
 pub const IDE_DISK_MASTER: u8 = 0xE0; // 0b11100000
 pub const IDE_DISK_SLAVE: u8 = 0xF0; //  0b11110000
@@ -80,8 +81,7 @@ struct AlignedArray {
 
 pub struct IDEController {
     // only two bus supported, sorry ATA/IDE/PATA afficionados
-    // TODO Locking
-    pub buses: [Rc<RefCell<Bus>>; 2],
+    pub buses: [Arc<RwLock<Bus>>; 2],
 }
 
 // One ATA bus, used to interact with two drives
@@ -109,27 +109,25 @@ pub struct Bus {
     // Remember if master or slave is active
     pub active_drivesel: u8,
 
-    // TODO locking
-    pub disks: Vec<Rc<RefCell<IDEDisk>>>,
+    pub disks: RwLock<Vec<Arc<IDEDisk>>>,
 }
 
-use alloc::rc::Rc;
-use core::cell::RefCell;
 pub struct IDEDiskInfo {
     pub model: [u8; 40],
     pub slot: u8,
     // 28bit addressable sectors
     pub seccount: u32,
 }
+
 pub struct IDEDisk {
-    // TODO locking
     info: IDEDiskInfo,
-    bus: Rc<RefCell<Bus>>,
+    bus: Arc<RwLock<Bus>>,
 }
 
 impl block::BlockDriver for IDEDisk {
     fn read(&self, lba: usize, buffer: &mut [u8]) -> Result<(), ()> {
-        let mut bus = self.bus.borrow_mut();
+
+        let mut bus = self.bus.write().unwrap();
 
         bus.select_slot(self.info.slot);
         // TODO optimize to DMA more than 512 bytes at a time
@@ -170,7 +168,7 @@ impl Bus {
                 Pio::new(dmabase + ATA_REG_DMA_PRDT + 2),
                 Pio::new(dmabase + ATA_REG_DMA_PRDT + 3),
             ],
-            disks: vec![],
+            disks: RwLock::new(vec![]),
         }
     }
 
@@ -348,7 +346,6 @@ static mut PRDT: AlignedArray = AlignedArray {
         msb: 1 << 15,
     }; 512],
 };
-
 static mut BUFFER: [u8; 512] = [0 as u8; 512];
 
 use crate::memory::vmm::mapper;
@@ -404,32 +401,33 @@ impl IDEController {
         // Amen
         let mut controller: Box<IDEController> = Box::new(IDEController {
             buses: [
-                Rc::new(RefCell::new(Bus::new(0x1f0, 0x3f6, dma_base))),
-                Rc::new(RefCell::new(Bus::new(0x170, 0x376, dma_base + 0x8))),
+                Arc::new(RwLock::new(Bus::new(0x1f0, 0x3f6, dma_base))),
+                Arc::new(RwLock::new(Bus::new(0x170, 0x376, dma_base + 0x8))),
             ],
         });
 
-        // TODO locking
-
         // Check if there are drives connected
-        for bus in controller.buses.iter_mut() {
+        for bus_lock in controller.buses.iter_mut() {
             // Master
-            let mut b = bus.borrow_mut();
-            b.select_slot(IDE_DISK_MASTER);
-            if let Some(diskinfo) = b.probe() {
-                b.disks.push(Rc::new(RefCell::new(IDEDisk {
+            let mut bus = bus_lock.write().unwrap();
+            bus.select_slot(IDE_DISK_MASTER);
+
+            if let Some(diskinfo) = bus.probe() {
+                let mut disks = bus.disks.write().unwrap();
+                disks.push(Arc::new(IDEDisk {
                     info: diskinfo,
-                    bus: bus.clone(),
-                })));
+                    bus: bus_lock.clone(),
+                }));
             }
 
             // Slave
-            b.select_slot(IDE_DISK_SLAVE);
-            if let Some(diskinfo) = b.probe() {
-                b.disks.push(Rc::new(RefCell::new(IDEDisk {
+            bus.select_slot(IDE_DISK_SLAVE);
+            if let Some(diskinfo) = bus.probe() {
+                let mut disks = bus.disks.write().unwrap();
+                disks.push(Arc::new(IDEDisk {
                     info: diskinfo,
-                    bus: bus.clone(),
-                })));
+                    bus: bus_lock.clone(),
+                }));
             }
         }
 

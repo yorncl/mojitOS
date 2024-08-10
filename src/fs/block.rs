@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use crate::klib::lock::RwLock;
 
 pub trait BlockDriver {
     fn read(&self, lba: usize, buffer: &mut [u8]) -> Result<(), ()>;
@@ -6,21 +7,19 @@ pub trait BlockDriver {
     fn sector_size(&self) -> usize;
 }
 
-// TODO RW lock
-static mut BLOCKS_DEVS: Vec<Rc<RefCell<dyn BlockDriver>>> = vec![];
-pub fn get_devices() -> &'static Vec<Rc<RefCell<dyn BlockDriver>>> {
+static mut BLOCKS_DEVS: Vec<RwLock<Arc<dyn BlockDriver>>> = vec![];
+pub fn get_devices() -> &'static Vec<RwLock<Arc<dyn BlockDriver>>> {
     unsafe { &BLOCKS_DEVS }
 }
 
-use alloc::rc::Rc;
-use core::cell::RefCell;
+use alloc::sync::Arc;
 
 use super::{ext2, vfs};
 use super::vfs::FilesystemInit;
 
-pub fn register_device(dev: Rc<RefCell<dyn BlockDriver>>) {
+pub fn register_device(dev: Arc<dyn BlockDriver>) {
     unsafe {
-        BLOCKS_DEVS.push(dev);
+        BLOCKS_DEVS.push(RwLock::new(dev));
     }
 }
 
@@ -60,26 +59,21 @@ pub fn init_fs_from_devices() {
 
     unsafe {
         let mut buffer = [0 as u8; 512];
-        for dev in BLOCKS_DEVS.iter_mut() {
-            {
-                let driver = dev.borrow_mut();
-                driver.read(0, &mut buffer).unwrap();
-            }
+        for dev_lock in BLOCKS_DEVS.iter_mut() {
+            let dev = dev_lock.write().unwrap();
+            dev.read(0, &mut buffer).unwrap();
 
             // Read first block of device using lba
             // MBR partition
             if buffer[510] == 0x55 && buffer[511] == 0xAA {
-                let mbr: &MBR = unsafe { &*(buffer.as_ptr() as *const MBR) };
+                let mbr: &MBR = &*(buffer.as_ptr() as *const MBR);
                 let mut superblock = [0 as u8; 512];
                 let dest = mbr.parts[1].lba_start as usize;
 
-                {
-                    let driver = dev.borrow_mut();
-                    driver.read(dest + 2, &mut superblock).unwrap();
-                }
+                dev.read(dest + 2, &mut superblock).unwrap();
 
                 if ext2::Ext2::match_superblock(&superblock) {
-                    match ext2::Ext2::init(dest, dest + 2, &dev) {
+                    match ext2::Ext2::init(dest, dest + 2, dev.clone()) {
                         Ok(val) => {
                             vfs::get_filesystems().push(val);
                         },

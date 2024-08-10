@@ -1,10 +1,13 @@
 use crate::{klog, x86::apic};
 use core::{arch::asm, mem::{size_of, self}, mem::offset_of, usize};
 
-use alloc::vec::Vec;
+use alloc::sync::Arc;
+
+// TODO better stack size management, at higher level if possible
+pub const STACK_SIZE: usize = 4096;
 
 #[repr(C)]
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct Context {
     // General purpose
     pub eax: u32,
@@ -29,16 +32,34 @@ pub struct Context {
     // fs: u32,
     // gs: u32,
 
-    pub stack: Vec<u8>
+    pub stack: Arc<[u8; STACK_SIZE]>
     // TODO FPU, SSE et tutti quanti
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self {
+            eax: 0,
+            ebx: 0,
+            ecx: 0,
+            edx: 0,
+            esi: 0,
+            edi: 0,
+            ebp: 0,
+            esp: 0,
+            eip: 0,
+            eflags: 0,
+            stack: Arc::new([0 as u8; STACK_SIZE]),
+        }
+    }
 }
 
 impl Context {
 
     pub fn init_stack(&mut self) {
-        self.stack = vec![0 as u8; 4096];
+        self.stack = Arc::new([0 as u8; STACK_SIZE]);
         // klog!("New stack allocated at {:x}", self.stack.as_ptr() as usize);
-        self.ebp = self.stack.as_ptr() as u32 + 4096;
+        self.ebp = self.stack.as_ptr() as u32 + STACK_SIZE as u32;
         self.esp = self.ebp;
     }
 
@@ -56,7 +77,7 @@ use crate::schedule;
 // TODO think of unlock context in the future, cf Redox
 // EAX, ECX, EDX saved by caller
 #[no_mangle]
-extern "cdecl" fn switch_inner(prev: &mut Context, next: &mut Context) {
+extern "cdecl" fn switch_inner(prev: &mut Context, next: &Context) {
     unsafe {
         // TODO eflags
         asm!(
@@ -86,7 +107,7 @@ extern "cdecl" fn switch_inner(prev: &mut Context, next: &mut Context) {
             in("ecx") prev,
             in("edx") next,
             off_ebx = const(offset_of!(Context, ebx)),
-            off_esi= const(offset_of!(Context, esi)),
+            off_esi = const(offset_of!(Context, esi)),
             off_edi = const(offset_of!(Context, edi)),
             off_esp = const(offset_of!(Context, esp)),
             off_ebp = const(offset_of!(Context, ebp)),
@@ -99,8 +120,8 @@ extern "cdecl" fn switch_inner(prev: &mut Context, next: &mut Context) {
 
 
 #[no_mangle]
-pub fn switch(prev: &mut Context, next: &mut Context) {
+pub fn switch(prev: &mut Context, next: Context) {
     // klog!("PREV EBP {:x} ESP {:x}", prev.ebp, prev.esp);
     // klog!("NEXT EBP {:x} ESP {:x}", next.ebp, next.esp);
-    switch_inner(prev, next);
+    switch_inner(prev, &next);
 }

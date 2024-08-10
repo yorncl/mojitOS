@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use alloc::rc::Rc;
+use alloc::sync::Arc;
 use core::cell::RefCell;
 
 use super::block::BlockDriver;
@@ -33,7 +33,7 @@ pub struct Inode {
 }
 
 pub struct Dentry {
-    inode: Rc<Inode>,
+    inode: Arc<Inode>,
 }
 
 // TODO filesystem error management
@@ -42,8 +42,8 @@ pub trait FilesystemInit {
     fn init(
         abs_lba_start: usize,
         abs_lba_super: usize,
-        driver: &Rc<RefCell<dyn BlockDriver>>,
-    ) -> Result<Rc<RefCell<Self>>, ()>;
+        driver: Arc<dyn BlockDriver>,
+    ) -> Result<Arc<Self>, ()>;
 }
 
 // Every filestystem will expose this API
@@ -62,7 +62,7 @@ pub trait Filesystem {
 
 // TODO refactor to be more efficient
 // optimize heap access, like a pointer ?
-type FsVec = Vec<Rc<RefCell<dyn Filesystem>>>;
+type FsVec = Vec<Arc<dyn Filesystem>>;
 use alloc::vec::Vec;
 static mut FILESYSTEMS: FsVec = vec![];
 pub fn get_filesystems() -> &'static mut FsVec {
@@ -93,9 +93,9 @@ pub fn path_walk(path: &str) -> Result<Inode, Error> {
 }
 
 // Takes the root filesystem
-pub fn mount_kern_root(rootfs: &Rc<RefCell<dyn Filesystem>>) -> Result<(), Error> {
+pub fn mount_kern_root(rootfs: Arc<dyn Filesystem>) -> Result<(), Error> {
     unsafe {
-        KERN_ROOT_INODE = rootfs.borrow().get_root().unwrap();
+        KERN_ROOT_INODE = rootfs.get_root().unwrap();
     }
     Ok(())
 }

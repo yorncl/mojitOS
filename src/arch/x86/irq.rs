@@ -1,6 +1,8 @@
 
 use alloc::vec::Vec;
 
+use crate::klog;
+
 const ARRAY_REPEAT_VALUE : Vec<fn () -> Result<(),()>> = Vec::new();
 static mut TOP_HANDLERS: [Vec<fn () -> Result<(),()>>; 256] = [ARRAY_REPEAT_VALUE; 256];
 
@@ -29,4 +31,16 @@ pub fn request_irq_top(irq_line: u32, handler: fn () -> Result<(),()>) -> Result
     Ok(())
 }
 
-
+pub fn print_handlers() {
+    klog!("__________________ TOP HANDLERS");
+    unsafe {
+        for (i, v) in TOP_HANDLERS.iter().enumerate() {
+            if v.len() > 0 {
+                klog!("TOP HANLDER {}", i);
+                for (j, f) in TOP_HANDLERS[i].iter().enumerate() {
+                    klog!("    Fn Entry {} ptr:{:p}", j, TOP_HANDLERS[i][j]);
+                }
+            } 
+        }
+    }
+}

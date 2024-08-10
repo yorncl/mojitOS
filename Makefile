@@ -74,6 +74,7 @@ klib_test:
 # 	$(QEMU) -cdrom $(ISO) -no-reboot
 
 debug: $(NAME)
-	$(QEMU) -kernel $(NAME) -s -S -no-reboot -d int,cpu_reset
+	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -s -S -no-reboot -d int,cpu_reset
+	# $(QEMU) -kernel $(NAME) -s -S -no-reboot -d int,cpu_reset
 
 .PHONE: all clean run debug link asm

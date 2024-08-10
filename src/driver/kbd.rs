@@ -1,4 +1,5 @@
 use crate::arch::io;
+use crate::klog;
 
 use super::input;
 use crate::arch::irq;
@@ -32,7 +33,7 @@ pub fn init() -> Result<(),()> {
         // panic!("PS2 translation enabled");
     }
     // TODO remap to sensible number
-    if irq::request_irq_top(33, int_handler).is_err() {
+    if irq::request_irq_top(42, int_handler).is_err() {
         panic!("Could not init keyboard driver!");
     }
     Ok(())

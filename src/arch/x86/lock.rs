@@ -4,17 +4,17 @@ use core::ptr::addr_of;
 
 // static mut THELOCK: u32 = 0;
 
-pub struct SpinLock {
+pub struct RawSpinLock {
     state: usize
 }
 
-impl SpinLock {
+impl RawSpinLock {
 
-    pub fn new() -> SpinLock {
-        SpinLock {state: 0}
+    pub const fn new() -> RawSpinLock {
+        RawSpinLock {state: 0}
     }
 
-    fn exchange(&mut self, order: usize) -> bool {
+    fn exchange(&self, order: usize) -> bool {
         let mut value = order;
         unsafe {
             asm!(
@@ -26,12 +26,12 @@ impl SpinLock {
         value == order
     }
 
-    pub fn lock(&mut self) {
+    pub fn lock(&self) {
             while self.exchange(1) {
             }
     }
 
-    pub fn release(&mut self) {
+    pub fn release(&self) {
             self.exchange(0);
     }
 }

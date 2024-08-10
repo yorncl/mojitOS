@@ -9,6 +9,7 @@ pub enum InputEvent {
 }
 
 // TODO thread safety
+// TODO remove need for new allocations as input queuing will tak place in interrupt context
 static mut QUEUE: VecDeque<InputEvent> = VecDeque::new();
 
 pub fn push_event(ev: InputEvent) {

@@ -7,7 +7,6 @@ use core::fmt;
 /// Ultimately will be replaced by a buddy system
 
 // TODO this is a naive page manager, only for bootstraping the kernel development
-// TODO locking
 pub const BITMAP_SIZE: usize = arch::N_PAGES; // enough to manage 4GB
 
 pub struct BitMap {

@@ -5,8 +5,7 @@ use crate::memory::vmm::mapper;
 use crate::x86::paging::ROUND_PAGE_UP;
 use alloc::alloc::{Layout, GlobalAlloc};
 use core::mem::size_of;
-use crate::{is_aligned, kprint};
-use super::Lock;
+use crate::{is_aligned, kprint, klog};
 use core::fmt;
 
 pub struct ListAllocator
@@ -84,6 +83,11 @@ impl ListAllocator
         // we will loop throught the nodes to find the neigbhours
         let head_address = self.head.addr();
         let mut current = &mut self.head;
+        // TODO temp fix until I get the courage to clean up all the code from this allocator
+        if current.next.is_none() {
+            current.next = Some(block);
+            return;
+        }
         while !current.next.is_none() {
             let ca = current.addr();
             // TODO confused about the ownership situation here
@@ -117,7 +121,7 @@ impl ListAllocator
             }
             current = current.next.as_mut().unwrap(); // TODO don't really understand this line
         }
-        panic!("Invalid free pointer");
+        panic!("Invalid free pointer {:x}", block.addr());
     }
 
     /// Tries to find an existing free block of sufficient enough size
@@ -143,7 +147,7 @@ impl ListAllocator
                 unsafe {
                     let left = BlockInfo {size: b.size - new_size, next: b.next.take()};
                     // TODO this line makes me sad
-                    let left_ptr = (*b as *mut BlockInfo as *mut u8).offset(b.size.try_into().unwrap());
+                    let left_ptr = (*b as *mut BlockInfo as *mut u8).offset(new_size as isize);
                     // TODO might crash on large blocks
                     (left_ptr as *mut BlockInfo).write(left);
                     // Downsizing newly allocated block size
@@ -215,9 +219,10 @@ impl ListAllocator
 
     pub fn print_list(&self)
     {
-        kprint!("fn print_list : head {:p}|", self as *const ListAllocator);
+        klog!("---------- fn print_list");
+        kprint!("head {:p}|", &self.head as *const BlockInfo);
         let mut current = &self.head.next;
-        let i = 0;
+        let mut i = 0;
         loop {
             match current {
                 Some(b) => {
@@ -226,25 +231,28 @@ impl ListAllocator
                 }
                 None => break
             }
+            i += 1;
         }
         kprint!("\n");
     }
 }
 
 
-// TODO move
-use crate::arch::lock;
-
-unsafe impl GlobalAlloc for Lock<ListAllocator>
+use crate::klib::lock::RwLock;
+unsafe impl GlobalAlloc for RwLock<Option<ListAllocator>>
 {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8
     {
-        let alloc = self.get();
-        // alloc.print_list();
+        let mut alloc_guard = self.write().unwrap();
+        let alloc = alloc_guard.as_mut().unwrap();
         let (size, _align) = ListAllocator::adjust_layout(layout);
+        klog!("___________ ALLOC for {}", size);
+        // alloc.print_list();
         match alloc.alloc_block(size + size_of::<BlockInfo>()) { // TODO better alignment
             // management
             Ok(b) => {
+                // klog!("___________             alloc END");
+                // alloc.print_list();
                 let address = b as *mut u8 as usize;
                 let ptr = (address + binfo_size!()) as *mut u8;
                 return ptr
@@ -254,7 +262,9 @@ unsafe impl GlobalAlloc for Lock<ListAllocator>
     }
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout)
     {
-        let alloc = self.get();
+        // klog!("___________ DEALLOC");
+        let mut alloc_guard = self.write().unwrap();
+        let alloc = alloc_guard.as_mut().unwrap();
         // alloc.print_list();
         // TODO check aligntment and use layout
         // TODO Add a mechanism to check if the pointer is valid ?

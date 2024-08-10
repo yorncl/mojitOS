@@ -1,4 +1,8 @@
 use super::block::BlockDriver;
+use super::vfs::{self, Filesystem};
+use crate::klog;
+use alloc::sync::Arc;
+use core::cell::RefCell;
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
@@ -35,47 +39,27 @@ pub struct SuperBlock {
 // Compile time checks to ensure correct size of structures
 const _: [u8; 84] = [0 as u8; core::mem::size_of::<SuperBlock>()];
 
-use super::vfs::{self, Filesystem};
-
 pub struct Ext2 {
     info: vfs::Info,
     sb: SuperBlock,
-    driver: Rc<RefCell<dyn BlockDriver>>,
+    driver: Arc<dyn BlockDriver>,
 }
-
-use alloc::boxed::Box;
-use alloc::rc::Rc;
-use core::cell::RefCell;
-
-impl Ext2 {
-
-//     fn open_inode(&self, lba: usize, buffer: &[u8]) -> {
-//         // TODO fix those borrow_mut shenanigans
-//         let drv = self.driver.borrow_mut();
-
-//         // drv.read_block(lba, &mut buffer);
-//     }
-}
-
-// macro_rules! block_inode {
-//     ($inode) => {
-//           self.sb.  
-//     };
-// }
-use crate::klog;
 
 impl Ext2 {
     pub fn get_block_group(&self, index: usize) {
-        klog!("total : {}", {self.sb.total_blocks});
-        klog!("per group : {}", {self.sb.blocks_per_group});
-        klog!("n block groups : {}", self.sb.total_blocks / self.sb.blocks_per_group);
+        klog!("total : {}", { self.sb.total_blocks });
+        klog!("per group : {}", { self.sb.blocks_per_group });
+        klog!(
+            "n block groups : {}",
+            self.sb.total_blocks / self.sb.blocks_per_group
+        );
     }
 }
 
 impl Filesystem for Ext2 {
     fn get_root(&self) -> Result<vfs::Inode, ()> {
         let rootindex = 2;
-        let bgi = (rootindex - 1) /self.sb.inodes_per_group as usize;
+        let bgi = (rootindex - 1) / self.sb.inodes_per_group as usize;
 
         let mut buffer = [0 as u8; 512];
 
@@ -95,36 +79,35 @@ impl vfs::FilesystemInit for Ext2 {
     fn init(
         abs_lba_start: usize,
         abs_lba_super: usize,
-        driver: &Rc<RefCell<dyn BlockDriver>>,
-    ) -> Result<Rc<RefCell<Ext2>>, ()> {
+        driver: Arc<dyn BlockDriver>,
+    ) -> Result<Arc<Ext2>, ()> {
         let mut buffer = [0 as u8; 512];
         // Read the superblock
         //
 
-        // TODO ugly, in braces for the ref to drop 
+        // TODO ugly, in braces for the ref to drop
         {
             let drv = driver.clone();
-            let handler = drv.borrow_mut();
-            handler.read(abs_lba_super, &mut buffer).unwrap();
+            // let handler = drv.borrow_mut();
+            drv.read(abs_lba_super, &mut buffer).unwrap();
         }
 
         let sb = unsafe { &*(buffer.as_ptr() as *const SuperBlock) };
 
         // Checks for ext2 version >= 1, expecting superblock extensions
         // TODO handle exten
-        if {sb.major_version} < 1 {
-            return Err(())
+        if { sb.major_version } < 1 {
+            return Err(());
         }
 
-        let fs = RefCell::new(Ext2 {
+        let fs = Ext2 {
             info: vfs::Info {
-                lba_offset: {sb.superblock_index} as usize,
-                block_size: 1024 << {sb.block_size_log2},
+                lba_offset: { sb.superblock_index } as usize,
+                block_size: 1024 << { sb.block_size_log2 },
             },
             sb: sb.clone(),
             driver: driver.clone(),
-        });
-
-        Ok(Rc::new(fs))
+        };
+        Ok(Arc::new(fs))
     }
 }
