@@ -9,6 +9,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 #[allow(dead_code)]
+/// Contains the value for ATA commands, registers and others useful constants
 mod ata_macros {
     // ATA IO regs offsets
     pub const ATA_REG_DATA: u16 = 0x00;

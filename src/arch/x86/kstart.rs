@@ -21,7 +21,9 @@ use super::pic;
 use super::acpi;
 
 extern "C" {
+    /// Defined in linker file
     static kernel_image_start : u32;
+    /// Defined in linker file
     static kernel_image_end : u32;
 }
 
@@ -32,11 +34,11 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
 {
     // early vga logging
     vga::io_init();
-    klog!("VGA initialized");
+    dbg!("VGA initialized");
 
     // Cpu features requirements
     cpuid::init();
-    klog!("CPU vendor: {}", cpuid::vendor());
+    dbg!("CPU vendor: {}", cpuid::vendor());
     if !cpuid::check_local_apic() {
         panic!("APIC needed!")
     }
@@ -46,16 +48,16 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     let kstart: usize;
     let kend: usize;
     unsafe {
-        klog!("Kernel start {:p}", &kernel_image_start);
-        klog!("Kernel end {:p}", &kernel_image_end);
+        dbg!("Kernel start {:p}", &kernel_image_start);
+        dbg!("Kernel end {:p}", &kernel_image_end);
         kstart = &kernel_image_start as *const u32 as usize;
         kend = &kernel_image_end as *const u32 as usize;
     }
-    // TODO should I calulate this before jumping to kstart, as it might require identity mapping more pages
-    // at the start ?
     let ksize = (kend - kstart)/1024; 
-    klog!("Kernel size : {}KB", ksize);
-    klog!("Multiboot: magic({:x}) mboot({:p})", magic, mboot);
+    dbg!("Kernel size : {}KB", ksize);
+    // TODO we need better early mapping if the kernel is too big
+    assert!(ksize < 3 * 1024 * 1024);
+    dbg!("Multiboot: magic({:x}) mboot({:p})", magic, mboot);
 
     // setting the first 4MB of PMM bitmap TODO api seems dirty
 
@@ -69,9 +71,9 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
             Err(MbootError::NoMemoryMap) => {panic!("No memory map")}, // TODO BIOS functions ?
             Ok(()) => (),
     }
-    klog!("Physical Memory regions:");
+    dbg!("Physical Memory regions:");
     for entry in memory::phys_mem().regions  {
-        klog!("- {entry:?}");
+        dbg!("- {entry:?}");
     }
 
     // This will filter out unusable pages

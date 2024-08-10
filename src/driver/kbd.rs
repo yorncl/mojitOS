@@ -27,6 +27,7 @@ fn int_handler() -> Result<(),()> {
     Ok(())
 }
 
+/// Init the PS2/Keyboard driver
 pub fn init() -> Result<(),()> {
     let conf = read_conf_byte();
     if conf & (1 << 6) != 0 {

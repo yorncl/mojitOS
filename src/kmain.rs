@@ -58,12 +58,15 @@ pub fn spawn_proc_1() {
 
 use crate::fs::block;
 
+/// The main loop of the kernel
+/// Once the scheduler is created the kernel will alterante between tasks
+/// Thus the instruction pointer will not come back inside this fucntion after the first context
+/// switch
 pub fn kmain() -> ! {
     #[cfg(test)]
     klog!("Hello from kmain");
     #[cfg(test)]
     test_main();
-
 
     driver::pci::init();
 
@@ -87,7 +90,7 @@ pub fn kmain() -> ! {
             }
             _ => {}
         }
-    }    
+    }
 
     // Will panic if no block have been registered
     block::init_fs_from_devices();
@@ -109,6 +112,7 @@ pub fn kmain() -> ! {
 }
 
 #[panic_handler]
+/// The panic handler for the kernel
 fn panic(_info: &PanicInfo) -> ! {
     klog!("Ceci est une panique \n"); // TODO log macro
                                       // print panic
