@@ -21,4 +21,5 @@ path = "src/kmain.rs"
 [features]
 inline-asm = []
 naked = []
+debug_serial = []
 

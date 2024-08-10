@@ -35,12 +35,12 @@ $(DISKIMG):
 update_mnt: all
 	mkdir -p mnt
 	cp $(NAME) mnt/$(NAME)
-	# I got issues where the file wasn't immediately runnable by grub when copied in the vfat mounted folder
+	#I got issues where the file wasn't immediately runnable by grub when copied in the vfat mounted folder
 	sync
 	
 
 $(KLIB):
-	$(CARGO) build  # TODO debug ?
+	$(CARGO) build --features debug_serial  # TODO debug ?
 
 target/obj/%.o: src/%.S
 	mkdir -p $(dir $@)
@@ -62,7 +62,7 @@ clean:
 # 	$(QEMU) -cdrom $(ISO) -no-reboot
 
 run: update_mnt $(DISKIMG)
-	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -monitor stdio -no-reboot
+	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -serial stdio -no-reboot
 
 
 klib_test:

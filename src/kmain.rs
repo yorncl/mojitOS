@@ -101,14 +101,9 @@ pub fn kmain() -> ! {
     }
     // fs::vfs::mount_kern_root(fss[0].clone());
 
-    irq::print_handlers();
     schedule::init();
-    irq::print_handlers();
     schedule::new_kernel_thread(spawn_proc_0);
-    // schedule::new_kernel_thread(spawn_proc_1);
-    irq::print_handlers();
-    klog!("================== ENABLING INTERRUPTS");
-    klog!("================== ENABLING INTERRUPTS");
+    schedule::new_kernel_thread(spawn_proc_1);
     arch::enable_interrupts();
     loop {}
 }

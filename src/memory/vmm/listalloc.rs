@@ -5,7 +5,7 @@ use crate::memory::vmm::mapper;
 use crate::x86::paging::ROUND_PAGE_UP;
 use alloc::alloc::{Layout, GlobalAlloc};
 use core::mem::size_of;
-use crate::{is_aligned, kprint, klog};
+use crate::{is_aligned, dbg_print, dbg};
 use core::fmt;
 
 pub struct ListAllocator
@@ -102,13 +102,18 @@ impl ListAllocator
                     current = current.next.as_mut().unwrap();
                     // TODO coalesce with next ?
                 }
-                else {
+                else if ca + current.size == block.addr() {
                     current.size += block.size;
                     // coalesce with next block if touching
                     if ca + current.size == next.addr() {
                         current.size += next.size;
                         current.next = next.next.take(); 
                     }
+                }
+                else {
+                    let tmp = current.next.take();
+                    block.next = tmp;
+                    current.next = Some(block);
                 }
                 // If the last free block is at the heap's end, unmap pages if we can
                 if current.next.is_none() && current.addr() + current.size == self.memstart + self.heapsize {
@@ -219,24 +224,22 @@ impl ListAllocator
 
     pub fn print_list(&self)
     {
-        klog!("---------- fn print_list");
-        kprint!("head {:p}|", &self.head as *const BlockInfo);
+        dbg_print!("head {:^10p}|", &self.head as *const BlockInfo);
         let mut current = &self.head.next;
         let mut i = 0;
         loop {
             match current {
                 Some(b) => {
-                    kprint!("block {} {:?} {:p}| ", i, b.size, *b as *const BlockInfo);
+                    dbg_print!("B{:^4} {:^4} {:p}| ", i, b.size, *b as *const BlockInfo);
                     current = &b.next; 
                 }
                 None => break
             }
             i += 1;
         }
-        kprint!("\n");
+        dbg_print!("\n");
     }
 }
-
 
 use crate::klib::lock::RwLock;
 unsafe impl GlobalAlloc for RwLock<Option<ListAllocator>>
@@ -246,15 +249,15 @@ unsafe impl GlobalAlloc for RwLock<Option<ListAllocator>>
         let mut alloc_guard = self.write().unwrap();
         let alloc = alloc_guard.as_mut().unwrap();
         let (size, _align) = ListAllocator::adjust_layout(layout);
-        klog!("___________ ALLOC for {}", size);
+        // dbg!("___________ ALLOC REQUEST for {}", size);
         // alloc.print_list();
         match alloc.alloc_block(size + size_of::<BlockInfo>()) { // TODO better alignment
             // management
             Ok(b) => {
-                // klog!("___________             alloc END");
                 // alloc.print_list();
                 let address = b as *mut u8 as usize;
                 let ptr = (address + binfo_size!()) as *mut u8;
+                // dbg!("____________ ALLOC DONE at {:p} for {}\n", ptr, (*b).size);
                 return ptr
             }
             Err(_e) => return core::ptr::null_mut()
@@ -262,15 +265,16 @@ unsafe impl GlobalAlloc for RwLock<Option<ListAllocator>>
     }
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout)
     {
-        // klog!("___________ DEALLOC");
         let mut alloc_guard = self.write().unwrap();
         let alloc = alloc_guard.as_mut().unwrap();
-        // alloc.print_list();
         // TODO check aligntment and use layout
         // TODO Add a mechanism to check if the pointer is valid ?
         let block_address = ptr as usize - binfo_size!();
         let block: &mut BlockInfo =  &mut*(block_address as *mut BlockInfo);
+        // dbg!("___________ DEALLOC REQUEST, address {:p} block size {}", ptr, block.size);
         alloc.free_block(block);
+        // alloc.print_list();
+        // dbg!("___________ DEALLOC DONE\n");
     }
 }
 

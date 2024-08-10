@@ -7,6 +7,8 @@ pub mod timer;
 pub mod pci_ide;
 pub mod pci;
 
+pub mod serial;
+
 pub trait DriverInterface {
     fn init() -> Result<(),()>;
 }

@@ -57,6 +57,7 @@ impl Default for Context {
 impl Context {
 
     pub fn init_stack(&mut self) {
+        // TODO remove, causes double allocation, only there to track down a bug in the list allocator
         self.stack = Arc::new([0 as u8; STACK_SIZE]);
         // klog!("New stack allocated at {:x}", self.stack.as_ptr() as usize);
         self.ebp = self.stack.as_ptr() as u32 + STACK_SIZE as u32;

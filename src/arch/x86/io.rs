@@ -18,7 +18,7 @@ pub trait PortIO {
 }
 
 impl<T> Pio<T> {
-    pub fn new(port: u16) -> Self {
+    pub const fn new(port: u16) -> Self {
         Pio {
             port,
             _value: PhantomData,

@@ -2,7 +2,7 @@ use super::paging;
 use crate::driver::vga;
 use crate::x86::apic;
 use crate::x86::paging::ROUND_PAGE_UP;
-use crate::klog;
+use crate::{klog, dbg};
 use crate::arch::common::multiboot;
 use crate::memory;
 use crate::memory::pmm;
