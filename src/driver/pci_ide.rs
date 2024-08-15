@@ -1,11 +1,11 @@
 use crate::driver::pci::{config::BarType, PCIDevice};
 use crate::fs::block;
 use crate::io::{Pio, PortIO};
-use crate::klog;
 use crate::klib::lock::RwLock;
-
-use alloc::sync::Arc;
+use crate::klog;
+use crate::error::{Result, EUNKNOWN};
 use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 #[allow(dead_code)]
@@ -109,8 +109,7 @@ pub struct Bus {
     pub dma_prdt: [Pio<u8>; 4],
     // Remember if master or slave is active
     pub active_drivesel: u8,
-
-    pub disks: RwLock<Vec<Arc<IDEDisk>>>,
+    pub disks: RwLock<Vec<Arc<RwLock<IDEDisk>>>>,
 }
 
 pub struct IDEDiskInfo {
@@ -126,8 +125,7 @@ pub struct IDEDisk {
 }
 
 impl block::BlockDriver for IDEDisk {
-    fn read(&self, lba: usize, buffer: &mut [u8]) -> Result<(), ()> {
-
+    fn read(&self, lba: block::Lba, buffer: &mut [u8]) -> Result<usize> {
         let mut bus = self.bus.write().unwrap();
 
         bus.select_slot(self.info.slot);
@@ -135,7 +133,7 @@ impl block::BlockDriver for IDEDisk {
         for chunk in buffer.chunks_mut(512) {
             bus.read_dma(lba.try_into().unwrap(), chunk)?;
         }
-        Ok(())
+        Ok(buffer.len())
     }
 
     fn sector_size(&self) -> usize {
@@ -173,10 +171,10 @@ impl Bus {
         }
     }
 
-    fn read_dma(&mut self, lba: u32, buffer: &mut [u8]) -> Result<(), ()> {
+    fn read_dma(&mut self, lba: u32, buffer: &mut [u8]) -> Result<()> {
         if (lba >> 28) > 0 {
             // TODO better error managemetn
-            return Err(())
+            return Err(EUNKNOWN);
         }
         let bus = &self;
         // stop bus master
@@ -213,8 +211,8 @@ impl Bus {
         bus.lba1.write((lba >> 8) as u8);
         bus.lba2.write((lba >> 16) as u8);
 
-        bus.drive_select.write(bus.drive_select.read() | (lba >> 24) as u8);
-
+        bus.drive_select
+            .write(bus.drive_select.read() | (lba >> 24) as u8);
 
         bus.seccount.write(1);
         bus.command.write(ATA_CMD_READ_DMA);
@@ -243,7 +241,7 @@ impl Bus {
         };
         if error {
             klog!("Error while DMA read");
-            return Err(());
+            return Err(EUNKNOWN);
         }
         // TODO most certainly very much garbage code
         // Copy into before
@@ -320,7 +318,7 @@ impl Bus {
         let mut diskinfo = IDEDiskInfo {
             model: [0; 40],
             slot: self.active_drivesel,
-            seccount: (id_response[61] as u32) << 16 | id_response[60] as u32
+            seccount: (id_response[61] as u32) << 16 | id_response[60] as u32,
         };
 
         // Parse and build Disck Structure
@@ -415,20 +413,20 @@ impl IDEController {
 
             if let Some(diskinfo) = bus.probe() {
                 let mut disks = bus.disks.write().unwrap();
-                disks.push(Arc::new(IDEDisk {
+                disks.push(Arc::new(RwLock::new(IDEDisk {
                     info: diskinfo,
                     bus: bus_lock.clone(),
-                }));
+                })));
             }
 
             // Slave
             bus.select_slot(IDE_DISK_SLAVE);
             if let Some(diskinfo) = bus.probe() {
                 let mut disks = bus.disks.write().unwrap();
-                disks.push(Arc::new(IDEDisk {
+                disks.push(Arc::new(RwLock::new(IDEDisk {
                     info: diskinfo,
                     bus: bus_lock.clone(),
-                }));
+                })));
             }
         }
 

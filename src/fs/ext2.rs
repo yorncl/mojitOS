@@ -1,8 +1,11 @@
-use super::block::BlockDriver;
-use super::vfs::{self, Filesystem};
-use crate::klog;
+use crate::dbg;
+use crate::error::{Result, EUNKNOWN};
+use crate::fs::block::{BlockDriver, Lba, Partition};
+use crate::fs::vfs::{self, FileSystemSetup, Filesystem, Inonum};
+use crate::klib::lock::RwLock;
 use alloc::sync::Arc;
-use core::cell::RefCell;
+
+use super::block;
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
@@ -36,68 +39,62 @@ pub struct SuperBlock {
     guid_reserved: u16,
 }
 
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+pub struct BGDescriptor {
+    block_bitmap: u32,
+    inode_bitmap: u32,
+    inode_table: u32,
+    free_blocks: u16,
+    free_inodes: u16,
+    n_direcotries: u16,
+    _unused: [u8; 14],
+}
+
 // Compile time checks to ensure correct size of structures
 const _: [u8; 84] = [0 as u8; core::mem::size_of::<SuperBlock>()];
+const _: [u8; 32] = [0 as u8; core::mem::size_of::<BGDescriptor>()];
 
+/// The Ext2 fileystem interface
 pub struct Ext2 {
     info: vfs::Info,
     sb: SuperBlock,
-    driver: Arc<dyn BlockDriver>,
+    part: Arc<Partition>,
 }
 
 impl Ext2 {
-    pub fn get_block_group(&self, index: usize) {
-        klog!("total : {}", { self.sb.total_blocks });
-        klog!("per group : {}", { self.sb.blocks_per_group });
-        klog!(
-            "n block groups : {}",
-            self.sb.total_blocks / self.sb.blocks_per_group
-        );
+    pub fn get_inode_block(&self, inode: Inonum) -> Result<Lba> {
+        let block_group = ((inode as u32 - 1) / self.sb.inodes_per_group) as usize;
+
+        let bgd = self.get_bg_descriptor(block_group)?;
+        todo!()
+    }
+
+    pub fn get_bg_descriptor(&self, index: usize) -> Result<BGDescriptor> {
+        // let mut buffer = [0 as u8; 512];
+        // let block_addr = (self.sb.block) as Lba;
+        // self.part.read(block_addr: buffer)?;
+        todo!()
     }
 }
 
-impl Filesystem for Ext2 {
-    fn get_root(&self) -> Result<vfs::Inode, ()> {
-        let rootindex = 2;
-        let bgi = (rootindex - 1) / self.sb.inodes_per_group as usize;
-
+impl FileSystemSetup for Ext2 {
+    fn try_init(part: Arc<Partition>) -> Result<Option<Arc<Ext2>>> {
         let mut buffer = [0 as u8; 512];
 
-        self.get_block_group(bgi);
-        // self.driver.borrow().read(0, );
-        // self.driver.borrow().read();
-        Err(())
-    }
-}
-
-impl vfs::FilesystemInit for Ext2 {
-    fn match_superblock(buffer: &[u8]) -> bool {
-        let sb = unsafe { &*(buffer.as_ptr() as *const SuperBlock) };
-        sb.ext2_signature == 0xef53
-    }
-
-    fn init(
-        abs_lba_start: usize,
-        abs_lba_super: usize,
-        driver: Arc<dyn BlockDriver>,
-    ) -> Result<Arc<Ext2>, ()> {
-        let mut buffer = [0 as u8; 512];
         // Read the superblock
-        //
-
-        // TODO ugly, in braces for the ref to drop
-        {
-            let drv = driver.clone();
-            // let handler = drv.borrow_mut();
-            drv.read(abs_lba_super, &mut buffer).unwrap();
-        }
-
+        // TODO I'm not clear on the buffer size still
+        part.read(2, &mut buffer)?;
         let sb = unsafe { &*(buffer.as_ptr() as *const SuperBlock) };
+
+        if sb.ext2_signature != 0xef53 {
+            return Ok(None);
+        }
 
         // Checks for ext2 version >= 1, expecting superblock extensions
         // TODO handle exten
         if { sb.major_version } < 1 {
-            return Err(());
+            return Ok(None);
         }
 
         let fs = Ext2 {
@@ -106,8 +103,25 @@ impl vfs::FilesystemInit for Ext2 {
                 block_size: 1024 << { sb.block_size_log2 },
             },
             sb: sb.clone(),
-            driver: driver.clone(),
+            part: part.clone(),
         };
-        Ok(Arc::new(fs))
+        Ok(Some(Arc::new(fs)))
+    }
+}
+
+impl Filesystem for Ext2 {
+    // TODO handle other ext2 versions
+    fn get_root_inode(&self) -> Result<Inonum> {
+        let rootindex: Inonum = 2;
+        Ok(rootindex)
+    }
+
+    fn read_inode(&self, inode: Inonum) -> Result<vfs::Vnode> {
+        // self.driver.read
+        todo!()
+    }
+
+    fn read(&self) -> Result<usize> {
+        unimplemented!()
     }
 }

@@ -13,6 +13,7 @@ use core::panic::PanicInfo;
 
 mod arch;
 mod driver;
+mod error;
 mod fs;
 mod klib;
 mod memory;
@@ -40,36 +41,33 @@ fn trivial_assertion() {
 }
 
 pub fn spawn_proc_0() {
-    let mut val = 0;
+    let mut _val = 0;
     loop {
-        klog!("Proc 0 ---- {}", val);
+        dbg!("Proc 0 ---- {}", _val);
         for _i in 0..100000 {}
-        val += 1;
+        _val += 1;
     }
 }
+#[allow(dead_code)]
 pub fn spawn_proc_1() {
-    let mut val = 0;
+    let mut _val = 0;
     loop {
-        klog!("Proc 1 ---- {}", val);
+        dbg!("Proc 1 ---- {}", _val);
         for _i in 0..100000 {}
-        val += 1;
+        _val += 1;
     }
 }
 
 use crate::fs::block;
 
 /// The main loop of the kernel
-/// Once the scheduler is created the kernel will alterante between tasks
-/// Thus the instruction pointer will not come back inside this fucntion after the first context
-/// switch
 pub fn kmain() -> ! {
-    #[cfg(test)]
-    klog!("Hello from kmain");
-    #[cfg(test)]
-    test_main();
+    // PS/2 keyboard driver with ISA interrupts
+    driver::kbd::init().unwrap();
 
+    // Enumerating PCI bus
     driver::pci::init();
-
+    klog!("Enumerating PCI devices");
     for pci_dev in driver::pci::get_devices() {
         match pci_dev.kind {
             // ATA/IDE
@@ -79,10 +77,9 @@ pub fn kmain() -> ! {
                     // Register block devices from detected ATA disks if any
                     for bus_lock in drv.buses {
                         let bus = bus_lock.read().unwrap();
-
                         let disks = bus.disks.read().unwrap();
                         for d in disks.iter() {
-                            klog!("Some DRIVER IDE");
+                            klog!("  IDE drive");
                             block::register_device(d.clone());
                         }
                     }
@@ -93,6 +90,7 @@ pub fn kmain() -> ! {
     }
 
     // Will panic if no block have been registered
+    klog!("Initializing filesystems");
     block::init_fs_from_devices();
 
     // TODO id system for partition, kernel boot arg, something like ata1hd0part1
@@ -102,11 +100,15 @@ pub fn kmain() -> ! {
     if fss.len() > 1 {
         panic!("Don't know how to choose vfs root!");
     }
-    // fs::vfs::mount_kern_root(fss[0].clone());
+    // TODO ugly
+    fs::vfs::register_mount("/", fss[0].clone());
 
+    let file = fs::vfs::open("/home/yrn/hello-world");
+
+    // After the first scheduler tick, the execution context will not come back to this loop
     schedule::init();
-    schedule::new_kernel_thread(spawn_proc_0);
-    schedule::new_kernel_thread(spawn_proc_1);
+    // schedule::new_kernel_thread(spawn_proc_0);
+    // schedule::new_kernel_thread(spawn_proc_1);
     arch::enable_interrupts();
     loop {}
 }
@@ -114,14 +116,11 @@ pub fn kmain() -> ! {
 #[panic_handler]
 /// The panic handler for the kernel
 fn panic(_info: &PanicInfo) -> ! {
-    klog!("Ceci est une panique \n"); // TODO log macro
-                                      // print panic
-    klog!("{}\n", _info); // TODO log macro
-
-    #[cfg(test)]
-    test_main();
-
     arch::disable_interrupts();
-
+    // TODO could it dead lock ?
+    dbg!("Kernel panic!\n");
+    klog!("Kernel panic!\n");
+    dbg!("{}\n", _info); // TODO log macro
+    klog!("{}\n", _info); // TODO log macro
     loop {}
 }
