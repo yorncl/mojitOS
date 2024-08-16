@@ -125,7 +125,7 @@ pub struct IDEDisk {
 }
 
 impl block::BlockDriver for IDEDisk {
-    fn read(&self, lba: block::Lba, buffer: &mut [u8]) -> Result<usize> {
+    fn read(&self, lba: usize, buffer: &mut [u8]) -> Result<usize> {
         let mut bus = self.bus.write().unwrap();
 
         bus.select_slot(self.info.slot);

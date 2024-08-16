@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 pub type Lba = u64;
 
 pub trait BlockDriver {
-    fn read(&self, lba: Lba, buffer: &mut [u8]) -> Result<usize>;
+    fn read(&self, lba: usize, buffer: &mut [u8]) -> Result<usize>;
     // fn write_block(&self, lba: usize, buffer: &[u8]);
     fn sector_size(&self) -> usize;
 }
@@ -69,7 +69,9 @@ impl Partition {
     #[inline]
     pub fn read(&self, lba: Lba, buffer: &mut [u8]) -> Result<usize> {
         let driver = self.dev.write().unwrap();
-        driver.read(self.block_start + lba as u64, buffer)
+        // TODO fix this mapping 
+        let block_index = self.block_start + lba * 2;
+        driver.read(block_index as usize, buffer)
     }
 }
 
