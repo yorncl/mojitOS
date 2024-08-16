@@ -5,7 +5,7 @@ use crate::memory::vmm::mapper;
 use crate::x86::paging::ROUND_PAGE_UP;
 use alloc::alloc::{Layout, GlobalAlloc};
 use core::mem::size_of;
-use crate::{is_aligned, dbg_print, dbg};
+use crate::{is_aligned, dbg_print};
 use core::fmt;
 
 pub struct ListAllocator

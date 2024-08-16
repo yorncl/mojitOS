@@ -9,6 +9,7 @@ pub mod pci;
 
 pub mod serial;
 
+#[allow(dead_code)]
 pub trait DriverInterface {
     fn init() -> Result<(),()>;
 }

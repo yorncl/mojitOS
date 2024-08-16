@@ -38,13 +38,6 @@ pub fn _print(args: fmt::Arguments) {
     }
 }
 
-pub fn print_test() {
-    unsafe {
-        let mut driver = COM1.write().unwrap();
-        driver.write_str("Super les copaings").unwrap();
-    }
-}
-
 impl SerialDriver {
     pub fn puts(&mut self, bytes: &[u8]) {
         for b in bytes {

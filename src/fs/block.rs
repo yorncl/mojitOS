@@ -1,4 +1,4 @@
-use crate::error::{Result, EUNKNOWN};
+use crate::error::Result;
 use crate::fs::{ext2, vfs, vfs::FileSystemSetup};
 use crate::klib::lock::RwLock;
 use crate::klog;
@@ -11,16 +11,10 @@ pub type Lba = u64;
 pub trait BlockDriver {
     fn read(&self, lba: usize, buffer: &mut [u8]) -> Result<usize>;
     // fn write_block(&self, lba: usize, buffer: &[u8]);
-    fn sector_size(&self) -> usize;
 }
 
 /// Block devices are registered here
 static BLOCKS_DEVS: RwLock<Vec<Arc<RwLock<dyn BlockDriver>>>> = RwLock::new(Vec::new());
-
-/// get references to block devices vector
-pub fn get_devices() -> &'static RwLock<Vec<Arc<RwLock<dyn BlockDriver>>>> {
-    &BLOCKS_DEVS
-}
 
 pub fn register_device(dev: Arc<RwLock<dyn BlockDriver>>) {
     let mut v = BLOCKS_DEVS.write().unwrap();
@@ -57,6 +51,7 @@ struct MBR {
 /// The interface between the filesystem and the block driver
 /// This enable filesystem drivers to address blocks without thinking about the whole disk
 /// Eventually it might get integrated into/replaced by a request-based system, who knows
+#[allow(dead_code)]
 pub struct Partition {
     block_start: Lba,
     seccount: u64,

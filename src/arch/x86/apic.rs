@@ -194,6 +194,7 @@ pub mod timer {
     use super::*;
     use crate::io::{self, port};
 
+    #[allow(dead_code)]
     pub fn poll() -> u32 {
         lapic_read_reg(RegLapic::CurrentTimer)
     }

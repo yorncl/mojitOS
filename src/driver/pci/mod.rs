@@ -1,12 +1,10 @@
-use crate::io::PortIO;
 use crate::klog;
-
-mod id;
+use alloc::vec::Vec;
+use config::PCIEndpointConfig;
+use crate::klib::lock::RwLock;
 
 pub mod config;
-
-use config::PCIEndpointConfig;
-
+mod id;
 
 #[derive(Debug, Copy, Clone)]
 pub enum PCIType {
@@ -16,7 +14,6 @@ pub enum PCIType {
     SATA,
 }
 
-
 #[allow(dead_code)]
 #[derive(Copy, Clone)]
 pub struct PCIDevice {
@@ -25,40 +22,31 @@ pub struct PCIDevice {
     pub bus_num: u8,
     pub dev_num: u8,
     pub fn_num: u8,
-    pub kind: PCIType
+    pub kind: PCIType,
 }
 
 impl core::fmt::Debug for PCIDevice {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut r = f.debug_struct("PCIDevice");
         r.field("io", &self.bus_num)
-        .field("dev", &self.dev_num)
-        .field("fn", &self.fn_num)
-        .field("kind", &self.kind);
+            .field("dev", &self.dev_num)
+            .field("fn", &self.fn_num)
+            .field("kind", &self.kind);
         if let PCIType::Unsupported = self.kind {
             r.field("class", &format_args!("0x{:x}", self.config.class));
         }
-            r.finish()
+        r.finish()
     }
 }
 
-// TODO put behind lock probably
-use alloc::vec::Vec;
-
-static mut PCI_DEVICES: Vec<PCIDevice> = vec![];
-
-// TODO PUT IN A CELL OR LOCK DO SOMETHING
-#[inline]
-pub fn get_devices() -> &'static mut Vec<PCIDevice> {
-    unsafe {return &mut PCI_DEVICES}
-}
+pub static PCI_DEVICES: RwLock<Vec<PCIDevice>> = RwLock::new(vec![]);
 
 pub fn init() {
     // TODO check ACPI tables for PCI support, it's assumed there
     id::enumerate();
-    klog!("{} PCI devices detected", get_devices().len());
-    for dev in get_devices().iter() {
+    let devices = PCI_DEVICES.read().unwrap();
+    klog!("{} PCI devices detected", devices.len());
+    for dev in devices.iter() {
         klog!("{:?}", dev);
     }
 }
-

@@ -123,7 +123,7 @@ pub fn init() -> Result<(), &'static str> {
             // ptr is the pointer to the entries of the array
             // each entry will then point to the physical location of the corresponding table
             let mut ptr = addr_of!(rsdt.ptr_sdt);
-            for i in 0..nentries {
+            for _i in 0..nentries {
                 let entry = base_virt + (*ptr as usize - base_phys);
                 let header = &*(entry as *const ACPISDTHeader);
                 match core::str::from_utf8(&header.signature).unwrap() {

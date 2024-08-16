@@ -251,6 +251,7 @@ static STRINGS: [&str; 121] = [
     "Remote I/O error",
 ];
 
+#[allow(dead_code)]
 pub fn strerror(code: i32) -> &'static str {
     STRINGS[code as usize]
 }

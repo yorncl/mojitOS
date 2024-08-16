@@ -64,7 +64,9 @@ fn enumerate_functions(bus_num: u8, dev_num: u8) {
                 kind: identify_class(&conf),
             };
 
-            super::get_devices().push(new_dev);
+            let mut pci_devs = super::PCI_DEVICES.write().unwrap();
+            pci_devs.push(new_dev);
+            drop(pci_devs);
             // Multi-function device
             // bit 7 checks if this is a multi-funciton device
             // if not break the loop

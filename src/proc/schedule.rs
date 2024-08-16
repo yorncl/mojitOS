@@ -1,16 +1,13 @@
-use core::mem;
-
 use crate::arch;
 use crate::arch::context;
 use crate::arch::context::Context;
 use crate::irq::request_irq_top;
 use crate::klib::lock::{RwLock, RwLockWriteGuard};
-use crate::klog;
 
 use alloc::vec::Vec;
 
 #[derive(Default)]
-pub struct  Task {
+pub struct Task {
     pub context: Context,
 }
 
@@ -25,7 +22,7 @@ impl Task {
 static TASKS: RwLock<Vec<Task>> = RwLock::new(Vec::new());
 static mut GUARD: Option<RwLockWriteGuard<'static, Vec<Task>>> = None;
 static mut CURRENT: usize = 0;
-// static mut TASKS: Vec<Task>: 
+// static mut TASKS: Vec<Task>:
 
 #[no_mangle]
 pub static mut CONTEXT_CHANGE: u32 = 0;
@@ -38,8 +35,8 @@ pub fn schedule() -> Result<(), ()> {
         let tasks = GUARD.as_mut().unwrap();
         let prev = CURRENT;
         CURRENT += 1;
-        if prev  == CURRENT {
-            return Ok(())
+        if prev == CURRENT {
+            return Ok(());
         }
         if CURRENT == tasks.len() {
             CURRENT = 0;
@@ -69,7 +66,7 @@ extern "C" fn new_task_wrapper() {
     }
 }
 
-pub fn new_kernel_thread(entry_point: fn ()) {
+pub fn new_kernel_thread(entry_point: fn()) {
     // Create a new stack for that thread
     let mut task = Task::new();
     // Push the handler's address onto the new stack
@@ -98,20 +95,20 @@ pub fn new_kernel_thread(entry_point: fn ()) {
     cont.push(eflags); // EFLAGS
     cont.push(0x8); // CS
     cont.push(entry_point as u32); // EIP
-    // klog!("ENTRYPOINT {:x}", entry_point as u32);
+                                   // klog!("ENTRYPOINT {:x}", entry_point as u32);
 
     cont.push(new_task_wrapper as u32); // Return address from context_switch
-    
+
     let mut tasks = TASKS.write().unwrap();
     tasks.push(task);
 }
 
 fn idle_task() {
-    loop{
-    }
+    loop {}
 }
 
-pub fn init() {
-    request_irq_top(50, schedule);
+pub fn init() -> Result<(), ()> {
+    request_irq_top(50, schedule)?;
     new_kernel_thread(idle_task);
+    Ok(())
 }

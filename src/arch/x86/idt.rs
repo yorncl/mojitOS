@@ -35,6 +35,7 @@ extern "C" {
 }
 
 #[repr(C)]
+#[allow(dead_code)]
 struct IRetFrame {
     eip: u32,
     cs: u32,
@@ -42,6 +43,7 @@ struct IRetFrame {
 }
 
 #[repr(C)]
+#[allow(dead_code)]
 struct IRetExceptionFrame {
     eip: u32,
     cs: u32,
@@ -66,7 +68,8 @@ pub unsafe extern "C" fn generic_handler(interrupt_code: u32) {
     // Not Exception
     else {
         super::apic::end_of_interrupt();
-        irq::top_handlers(interrupt_code);
+        // TODO error handling here
+        let _ = irq::top_handlers(interrupt_code);
     }
 }
 

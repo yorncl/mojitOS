@@ -4,6 +4,7 @@
 #![feature(custom_test_frameworks)]
 #![test_runner(crate::test_runner)]
 #![feature(core_intrinsics)]
+#![allow(internal_features)]
 #![feature(asm_const)]
 
 #[macro_use]
@@ -68,12 +69,14 @@ pub fn kmain() -> ! {
     // Enumerating PCI bus
     driver::pci::init();
     klog!("Enumerating PCI devices");
-    for pci_dev in driver::pci::get_devices() {
-        match pci_dev.kind {
+
+    let mut pci_devices = driver::pci::PCI_DEVICES.write().unwrap();
+    for dev in pci_devices.iter_mut() {
+        match dev.kind {
             // ATA/IDE
             driver::pci::PCIType::IDE => {
                 // probe the controller
-                if let Some(drv) = driver::pci_ide::IDEController::probe_controller(pci_dev) {
+                if let Some(drv) = driver::pci_ide::IDEController::probe_controller(dev) {
                     // Register block devices from detected ATA disks if any
                     for bus_lock in drv.buses {
                         let bus = bus_lock.read().unwrap();
@@ -88,6 +91,7 @@ pub fn kmain() -> ! {
             _ => {}
         }
     }
+    drop(pci_devices);
 
     // Will panic if no block have been registered
     klog!("Initializing filesystems");
@@ -101,16 +105,15 @@ pub fn kmain() -> ! {
         panic!("Don't know how to choose vfs root!");
     }
     // TODO ugly
-    fs::vfs::register_mount("/", fss[0].clone());
+    let _ = fs::vfs::register_mount("/", fss[0].clone());
 
-    klog!("VFS tests");
-    let file = fs::vfs::vfs_open("/home/yrn/hello-world");
+    let _file = fs::vfs::vfs_open("/home/yrn/hello-world");
     klog!("VFS setup");
 
     // After the first scheduler tick, the execution context will not come back to this loop
-    schedule::init();
-    schedule::new_kernel_thread(spawn_proc_0);
-    schedule::new_kernel_thread(spawn_proc_1);
+    let _ = schedule::init();
+    // schedule::new_kernel_thread(spawn_proc_0);
+    // schedule::new_kernel_thread(spawn_proc_1);
     klog!("Starting the scheduler");
     arch::enable_interrupts();
     loop {}

@@ -103,6 +103,7 @@ pub type Inonum = u64;
 
 // Every filestystem will expose this API
 // It is the interface between them and the VFS layer
+#[allow(dead_code)]
 pub trait Filesystem {
     fn get_root_inode(&self) -> Result<Inonum>;
     fn read_inode(&self, inode: Inonum) -> Result<Vnode>;
@@ -219,7 +220,7 @@ pub fn walk_path_node(path: &Path) -> Result<Vnode> {
 
 pub fn vfs_open(path: &str) -> Result<File> {
     let p = Path::new(path);
-    let node = walk_path_node(&p)?;
+    let _node = walk_path_node(&p)?;
 
     Err(EINVAL)
 }

@@ -1,6 +1,4 @@
-use alloc::{collections::VecDeque};
-
-
+use alloc::collections::VecDeque;
 
 #[derive(Debug)]
 pub enum InputEvent {
@@ -18,10 +16,11 @@ pub fn push_event(ev: InputEvent) {
 }
 
 // TODO implement limit ?
+#[allow(dead_code)]
 pub fn process_input_events() {
     unsafe {
         while !QUEUE.is_empty() {
-            let v = QUEUE.pop_front().unwrap();
+            let _v = QUEUE.pop_front().unwrap();
         }
     }
 }

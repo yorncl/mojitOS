@@ -13,7 +13,7 @@ pub fn top_handlers(irq: u32) -> Result<(), ()> {
     unsafe {
         for h in TOP_HANDLERS[irq as usize].iter() {
             // TODO check error
-            h();
+            let _ = h();
         }
     }
     Ok(())

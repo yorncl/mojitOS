@@ -200,7 +200,7 @@ impl Ext2 {
         let inode = unsafe { *(buffer.as_ptr() as *const Inode).offset(inode_table_i as isize) };
 
         self.part.read(inode.block_ptr[0] as Lba, &mut buffer)?;
-        let db = DirBlock::new(buffer.as_ptr() as *const u8, 1024);
+        let _db = DirBlock::new(buffer.as_ptr() as *const u8, 1024);
         // dbg!("========= Start entries");
         // for _dir in db.into_iter() {
         //     dbg!("{:?}", _dir);
@@ -285,7 +285,7 @@ impl Filesystem for Ext2 {
 
     fn read_inode(&self, inode: Inonum) -> Result<vfs::Vnode> {
         // self.driver.read
-        self.get_inode(inode);
+        let _ = self.get_inode(inode);
         Err(EUNKNOWN)
     }
 

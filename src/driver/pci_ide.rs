@@ -135,10 +135,6 @@ impl block::BlockDriver for IDEDisk {
         }
         Ok(buffer.len())
     }
-
-    fn sector_size(&self) -> usize {
-        todo!()
-    }
 }
 
 impl Bus {
