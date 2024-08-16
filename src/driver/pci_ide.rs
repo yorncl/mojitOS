@@ -368,7 +368,6 @@ impl IDEController {
     //     klog!("status {:b}", err);
     //     if err & 0x1 != 0 {
     //         klog!("ERR {:b}", err);
-    //         loop {}
     //     }
 
     //     for _ in 0..512 {

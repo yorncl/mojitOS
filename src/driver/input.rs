@@ -1,6 +1,5 @@
-use alloc::{vec::Vec, collections::VecDeque};
+use alloc::{collections::VecDeque};
 
-use crate::klog;
 
 
 #[derive(Debug)]

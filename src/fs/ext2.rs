@@ -1,11 +1,10 @@
-use core::fmt::{Debug, Write};
+use core::fmt::Debug;
 use core::marker::PhantomData;
 use core::mem::size_of;
-use crate::{dbg, klog};
+use crate::dbg;
 use crate::error::{Result, EUNKNOWN};
-use crate::fs::block::{BlockDriver, Lba, Partition};
+use crate::fs::block::{Lba, Partition};
 use crate::fs::vfs::{self, FileSystemSetup, Filesystem, Inonum};
-use crate::klib::lock::RwLock;
 use alloc::sync::Arc;
 
 #[repr(C, packed)]
@@ -110,7 +109,8 @@ impl Dentry {
     }
 }
 
-/// Wrapper around a buffer containing directory entries
+/// Wrapper around a raw buffer containing directory entries
+/// Implements the iterator trait for ergonnomics
 pub struct DirBlock<'a> {
     ptr: *const u8,
     boundary: usize,
@@ -201,11 +201,11 @@ impl Ext2 {
 
         self.part.read(inode.block_ptr[0] as Lba, &mut buffer)?;
         let db = DirBlock::new(buffer.as_ptr() as *const u8, 1024);
-        dbg!("========= Start entries");
-        for dir in db.into_iter() {
-            dbg!("{:?}", dir);
-        }
-        dbg!("Reached the end");
+        // dbg!("========= Start entries");
+        // for _dir in db.into_iter() {
+        //     dbg!("{:?}", _dir);
+        // }
+        // dbg!("Reached the end do'");
         Ok(0)
     }
 
@@ -286,7 +286,6 @@ impl Filesystem for Ext2 {
     fn read_inode(&self, inode: Inonum) -> Result<vfs::Vnode> {
         // self.driver.read
         self.get_inode(inode);
-        loop {}
         Err(EUNKNOWN)
     }
 

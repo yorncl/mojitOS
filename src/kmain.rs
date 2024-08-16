@@ -103,12 +103,15 @@ pub fn kmain() -> ! {
     // TODO ugly
     fs::vfs::register_mount("/", fss[0].clone());
 
-    let file = fs::vfs::open("/home/yrn/hello-world");
+    klog!("VFS tests");
+    let file = fs::vfs::vfs_open("/home/yrn/hello-world");
+    klog!("VFS setup");
 
     // After the first scheduler tick, the execution context will not come back to this loop
     schedule::init();
-    // schedule::new_kernel_thread(spawn_proc_0);
-    // schedule::new_kernel_thread(spawn_proc_1);
+    schedule::new_kernel_thread(spawn_proc_0);
+    schedule::new_kernel_thread(spawn_proc_1);
+    klog!("Starting the scheduler");
     arch::enable_interrupts();
     loop {}
 }

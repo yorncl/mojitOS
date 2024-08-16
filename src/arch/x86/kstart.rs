@@ -9,7 +9,6 @@ use crate::memory::pmm;
 use crate::memory::pmm::{Frame, FrameRange};
 use crate::memory::vmm;
 use super::PAGE_SIZE;
-use crate::driver;
 use super::idt;
 use super::gdt;
 use super::cpuid;
@@ -26,7 +25,7 @@ extern "C" {
 /// Entrypoint post boot initialization
 /// At this point the first 4MB of physical memory, containing the kernel and some DMA areas, are mapped at two places
 #[no_mangle]
-pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
+pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
 {
     // early vga logging
     vga::io_init();
@@ -64,8 +63,8 @@ pub extern "C" fn kstart(magic: u32, mboot: *const u32) -> !
     }
 
     dbg!("Physical Memory regions:");
-    for entry in memory::phys_mem().regions  {
-        dbg!("- {:?}", entry);
+    for _entry in memory::phys_mem().regions  {
+        dbg!("- {:?}", _entry);
     }
 
     // This will filter out unusable pages

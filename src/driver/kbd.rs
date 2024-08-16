@@ -1,10 +1,7 @@
 use crate::arch::io;
-use crate::klog;
-
 use super::input;
-use crate::arch::irq;
 use crate::arch::io::port;
-
+use crate::arch::irq;
 
 #[repr(u8)]
 enum Command {
@@ -21,14 +18,14 @@ fn read_conf_byte() -> u8 {
     io::inb(port::PS2DATA)
 }
 
-fn int_handler() -> Result<(),()> {
+fn int_handler() -> Result<(), ()> {
     let event = read_data();
     input::push_event(input::InputEvent::Keyboard(event as u32));
     Ok(())
 }
 
 /// Init the PS2/Keyboard driver
-pub fn init() -> Result<(),()> {
+pub fn init() -> Result<(), ()> {
     let conf = read_conf_byte();
     if conf & (1 << 6) != 0 {
         // panic!("PS2 translation enabled");

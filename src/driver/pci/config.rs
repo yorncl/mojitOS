@@ -166,7 +166,7 @@ mod x86 {
             for c in self.caps.into_iter() {
                 crate::klog!("Caps base: 0x{:x}, id: {:x}", c.base, c.id());
             }
-            loop {}
+            todo!()
         }
 
         // TODO

@@ -1,7 +1,4 @@
-use super::context::Context;
-use super::paging::page_fault_handler;
-use crate::pic;
-use crate::{irq, klog, memory::vmm::mapper, x86::apic};
+use crate::{irq, klog};
 use core::arch::asm;
 use core::ptr::addr_of;
 

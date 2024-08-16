@@ -31,7 +31,6 @@ fn pic_remap(offset1: i8, offset2: i8)
     // let slave_mask = io::inb(port::PICSLAVEDATA);
 
     // klog!("PIC MASKS {:b} {:b}", master_mask, slave_mask);
-    // loop{}
 
     io::outb(port::PICMASTERCOMMAND, ICW1::INIT as u8 | ICW1::ICW4 as u8); // PIC reset
     io::wait();

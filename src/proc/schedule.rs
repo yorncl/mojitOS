@@ -53,10 +53,11 @@ pub fn schedule() -> Result<(), ()> {
 
 pub extern "C" fn unlock_scheduler() {
     unsafe {
-        match &GUARD {
-            Some(guard) => {drop(guard); GUARD = None;},
-            None => {panic!("This should not happen")},
+        let g = GUARD.take();
+        if g.is_none() {
+            panic!("This should not happen");
         }
+        drop(g);
         arch::enable_interrupts();
     }
 }
@@ -64,7 +65,6 @@ pub extern "C" fn unlock_scheduler() {
 use core::arch::asm;
 extern "C" fn new_task_wrapper() {
     unsafe {
-        // loop{}
         asm!("iretd", options(noreturn));
     }
 }

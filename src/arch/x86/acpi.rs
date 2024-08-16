@@ -105,7 +105,6 @@ pub fn init() -> Result<(), &'static str> {
             //         ptr = ptr.offset(1);
             //     }
             // }
-            // loop{}
 
             // MMIO remap the zone where the entries pointed by the RSDT are
             let nentries = (rsdt.h.length - size_of::<ACPISDTHeader>() as u32) / size_of::<usize>() as u32;

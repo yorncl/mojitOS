@@ -1,5 +1,4 @@
-use crate::{klog, x86::apic};
-use core::{arch::asm, mem::{size_of, self}, mem::offset_of, usize};
+use core::{arch::asm, mem::{self}, mem::offset_of, usize};
 
 use alloc::sync::Arc;
 

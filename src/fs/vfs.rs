@@ -1,10 +1,7 @@
-use super::block::{BlockDriver, Partition};
-use crate::{dbg, klog};
-use crate::error::{Result, EUNKNOWN};
-use alloc::string::ToString;
+use super::block::Partition;
+use crate::dbg;
+use crate::error::{Result, codes::*};
 use alloc::sync::Arc;
-use alloc::{boxed::Box, string::String};
-use core::cell::RefCell;
 
 // use to compose other filesystem
 pub struct Info {
@@ -65,6 +62,7 @@ impl Path {
 }
 // TODO are those types sensible ?
 // This is the virtual inode type
+#[allow(dead_code)]
 pub struct Vnode {
     // Inode number, unique identifier on the target filesystem
     inode: u32,
@@ -75,17 +73,20 @@ pub struct Vnode {
 
     kind: VnodeType,
 
-    driver: Arc<dyn Filesystem>,
     // TODO add timestamps
+    fops: Arc<dyn FileIO>
+    
 }
 
 // Directory entry, points to a single inode
+#[allow(dead_code)]
 pub struct Dentry {
     vnode: Arc<Vnode>,
     path: Path,
 }
 
 // File descriptor structure
+#[allow(dead_code)]
 pub struct File {
     dentry: Arc<Dentry>,
     f_pos: u64,
@@ -118,7 +119,7 @@ type FsVec = Vec<Arc<dyn Filesystem>>;
 use alloc::vec::Vec;
 static mut FILESYSTEMS: FsVec = vec![];
 pub fn get_filesystems() -> &'static mut FsVec {
-    unsafe { &mut FILESYSTEMS }
+    unsafe { &mut *core::ptr::addr_of_mut!(FILESYSTEMS) }
 }
 
 // TODO lock?
@@ -161,8 +162,11 @@ pub fn match_mountpoint(path: &Path) -> Arc<Mountpoint> {
     }
 }
 
+pub trait FileIO {
+}
+
 /// Takes a path and returns the corresponding node if any
-pub fn get_node(path: &Path) -> Result<Vnode> {
+pub fn walk_path_node(path: &Path) -> Result<Vnode> {
     dbg!("Here we are in this funciton");
     // TODO handle properly
     assert!(
@@ -176,13 +180,32 @@ pub fn get_node(path: &Path) -> Result<Vnode> {
     // iterator starting at end of mountpoints path
     // TODO the -1 here is not clear enough, it's supposed to be for the root component that's
     // empty
-    let components = path
+    let mut components = path
         .component_iter()
-        .skip(mount.path.component_iter().count() - 1);
+        .skip(mount.path.component_iter().count() - 1).peekable().into_iter();
 
     let inode = mount.fs.get_root_inode()?;
-    for c in components {
+    while let Some(c) = components.next() {
         let node: Vnode = mount.fs.read_inode(inode)?;
+
+        // TODO check access here
+
+        match node.kind {
+            VnodeType::File => {
+                // components left yet we're on a file, error
+                if components.peek().is_none() {
+                    return Err(ENOENT)
+                }
+            },
+            VnodeType::Dir => {
+
+            },
+            VnodeType::FIFO => todo!(),
+            VnodeType::Char => todo!(),
+            VnodeType::Block => todo!(),
+            VnodeType::Symlink => todo!(),
+            VnodeType::Socket => todo!(),
+        }
         // TODO manage access rights
 
         // empty component means no component
@@ -191,14 +214,12 @@ pub fn get_node(path: &Path) -> Result<Vnode> {
         }
         dbg!("Component {}", c);
     }
-    Err(EUNKNOWN)
+    Err(EINVAL)
 }
 
-pub fn open(path: &str) -> Result<File> {
-    dbg!("Here we are in this funciton");
+pub fn vfs_open(path: &str) -> Result<File> {
     let p = Path::new(path);
+    let node = walk_path_node(&p)?;
 
-    let node = get_node(&p)?;
-
-    Err(EUNKNOWN)
+    Err(EINVAL)
 }
