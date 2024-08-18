@@ -2,10 +2,11 @@ use core::fmt::Debug;
 use core::marker::PhantomData;
 use core::mem::size_of;
 use crate::dbg;
-use crate::error::{Result, EUNKNOWN};
 use crate::fs::block::{Lba, Partition};
-use crate::fs::vfs::{self, FileSystemSetup, Filesystem, Inonum};
+use crate::fs::vfs::{Vnode, Dentry, Info, FileSystemSetup, Filesystem, Inonum, FileOps, NodeOps};
+use crate::error::{Result, codes::*};
 use alloc::sync::Arc;
+
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
@@ -82,7 +83,7 @@ pub struct BGDescriptor {
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
-pub struct Dentry {
+pub struct Ext2Dentry {
     inode: u32,
     size: u16,
     lb_name_length: u8,
@@ -94,9 +95,9 @@ pub struct Dentry {
 const _: [u8; 84] = [0 as u8; core::mem::size_of::<SuperBlock>()];
 const _: [u8; 32] = [0 as u8; core::mem::size_of::<BGDescriptor>()];
 const _: [u8; 128] = [0 as u8; core::mem::size_of::<Inode>()];
-const _: [u8; 12] = [0 as u8; core::mem::size_of::<Dentry>()];
+const _: [u8; 12] = [0 as u8; core::mem::size_of::<Ext2Dentry>()];
 
-impl Dentry {
+impl Ext2Dentry {
     pub fn name(&self) -> Option<&'static str> {
         let name_start = core::ptr::addr_of!(self._padd) as *const u8; // \0 character
         Some(unsafe {
@@ -128,13 +129,13 @@ impl<'a> DirBlock<'a> {
 }
 
 impl<'a> Iterator for DirBlock<'a> {
-    type Item = &'a Dentry;
+    type Item = &'a Ext2Dentry;
 
     fn next(&mut self) -> Option<Self::Item> {
         if (self.ptr as usize) >= self.boundary {
             return None;
         }
-        let entry = unsafe { &*(self.ptr as *const Dentry) };
+        let entry = unsafe { &*(self.ptr as *const Ext2Dentry) };
         if entry.inode == 0 {
             return None;
         }
@@ -143,14 +144,13 @@ impl<'a> Iterator for DirBlock<'a> {
 
         // Round up to the next u32 boundary
         total_size = (total_size + 3) & !3;
-        dbg!("Total size to jump {}", total_size);
 
         self.ptr = unsafe { self.ptr.offset(total_size) };
         return Some(entry);
     }
 }
 
-impl Debug for Dentry {
+impl Debug for Ext2Dentry {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
@@ -166,23 +166,16 @@ impl Debug for Dentry {
 
 /// The Ext2 fileystem interface
 pub struct Ext2 {
-    info: vfs::Info,
+    info: Info,
     sb: SuperBlock,
     part: Arc<Partition>,
 }
 
 impl Ext2 {
-    fn get_inode(&self, inode_num: Inonum) -> Result<Lba> {
+    fn get_inode(&self, inode_num: Inonum) -> Result<Inode> {
         // Figure out in which block group the inode is
         let block_group = ((inode_num as u32 - 1) / self.sb.inodes_per_group) as usize;
         let bgd = self.get_bg_descriptor(block_group)?;
-        // dbg!(
-        //     "block {} inode {}, inode table {} dirs {}",
-        //     { bgd.block_bitmap },
-        //     { bgd.inode_bitmap },
-        //     { bgd.inode_table },
-        //     { bgd.n_directories }
-        // );
 
         // TODO clear up type and casts, remove fs/drive constants and place them in structs
         // TODO clean up the casts, less of it please
@@ -199,14 +192,12 @@ impl Ext2 {
         )?;
         let inode = unsafe { *(buffer.as_ptr() as *const Inode).offset(inode_table_i as isize) };
 
-        self.part.read(inode.block_ptr[0] as Lba, &mut buffer)?;
-        let _db = DirBlock::new(buffer.as_ptr() as *const u8, 1024);
         // dbg!("========= Start entries");
         // for _dir in db.into_iter() {
         //     dbg!("{:?}", _dir);
         // }
         // dbg!("Reached the end do'");
-        Ok(0)
+        Ok(inode)
     }
 
     fn get_bg_descriptor(&self, index: usize) -> Result<BGDescriptor> {
@@ -226,23 +217,25 @@ impl Ext2 {
             bgd_offset
         );
         self.part.read(block_addr, &mut buffer)?;
-        // unsafe {
-        //     let mut pointer = (buffer.as_ptr() as *const BGDescriptor);
-        //     for i in 0..1024/size_of::<BGDescriptor>() {
-        //         let bgd = *pointer;
-        //         dbg!(
-        //             "block {} inode {}, inode table {} dirs {}",
-        //             {bgd.block_bitmap},
-        //             {bgd.inode_bitmap},
-        //             {bgd.inode_table},
-        //             {bgd.n_directories}
-        //         );
-        //         pointer = pointer.offset(1);
-        //     }
-        // }
         Ok(unsafe { *(buffer.as_ptr().offset(bgd_offset as isize) as *const BGDescriptor) })
     }
 }
+
+// pub struct FileIO {
+//     inode: Arc<Inode>
+// }
+// pub struct DirIO {
+//     inode: Arc<Inode>
+// }
+
+// impl FileIO for DirIO {
+
+//     fn readdir(&self) -> Result<Option<Dentry>> {
+//         self.part.read(inode.block_ptr[0] as Lba, &mut buffer)?;
+//         let db = DirBlock::new(buffer.as_ptr() as *const u8, 1024);
+//         Err(ENOSYS)
+//     }
+// }
 
 impl FileSystemSetup for Ext2 {
     fn try_init(part: Arc<Partition>) -> Result<Option<Arc<Ext2>>> {
@@ -264,7 +257,7 @@ impl FileSystemSetup for Ext2 {
         }
 
         let fs = Ext2 {
-            info: vfs::Info {
+            info: Info {
                 lba_offset: { sb.superblock_index } as usize,
                 block_size: 1024 << { sb.block_size_log2 },
             },
@@ -283,13 +276,21 @@ impl Filesystem for Ext2 {
         Ok(rootindex)
     }
 
-    fn read_inode(&self, inode: Inonum) -> Result<vfs::Vnode> {
+    fn read_inode(&self, inode: Inonum) -> Result<Vnode> {
         // self.driver.read
-        let _ = self.get_inode(inode);
-        Err(EUNKNOWN)
+        let _ = self.get_inode_lba(inode);
+        todo!();
     }
 
     fn read(&self) -> Result<usize> {
         unimplemented!()
     }
+}
+
+
+pub struct InodeOps {}
+pub struct Dir {}
+pub struct File {}
+
+impl FileOps for Ext2FileOps {
 }

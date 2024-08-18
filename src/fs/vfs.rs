@@ -1,6 +1,6 @@
 use super::block::Partition;
 use crate::dbg;
-use crate::error::{Result, codes::*};
+use crate::error::{codes::*, Result};
 use alloc::sync::Arc;
 
 // use to compose other filesystem
@@ -23,6 +23,8 @@ enum VnodeType {
     Socket,
 }
 
+pub type Inonum = u64;
+
 pub struct Mountpoint {
     path: Path,
     fs: Arc<dyn Filesystem>,
@@ -31,6 +33,73 @@ pub struct Mountpoint {
 pub struct Path {
     buff: Vec<u8>,
 }
+
+// TODO are those types sensible ?
+// This is the virtual inode type
+#[allow(dead_code)]
+pub struct Vnode {
+    // Inode number, unique identifier on the target filesystem
+    inode: Inonum,
+    uid: u32,
+    gid: u32,
+    mode: u32,
+    kind: VnodeType,
+    // TODO add timestamps
+    ops: Arc<dyn NodeOps>,
+}
+
+// Directory entry, points to a single inode
+#[allow(dead_code)]
+pub struct Dentry {
+    vnode: Arc<Vnode>,
+    path: Path,
+}
+
+// File descriptor structure
+#[allow(dead_code)]
+pub struct File {
+    dentry: Arc<Dentry>,
+    pos: u64,
+    ops: Arc<dyn FileOps>,
+}
+
+// Operations traits
+// Those trait will be implemnted by each filesysystem
+// They will provide the callbacks to filesystem-specific operations
+
+/// Iinterface for Vnode operations
+pub trait NodeOps {
+    fn open(&self) -> Result<Option<File>> { Err(ENOSYS) }
+}
+
+/// Interface for file descriptor operations
+pub trait FileOps {
+    fn readdir(&self) -> Result<Option<Dentry>> { Err(ENOSYS) }
+}
+
+
+// Every filestystem will expose this API
+// It is the interface between them and the VFS layer
+#[allow(dead_code)]
+pub trait Filesystem {
+    fn get_root_inode(&self) -> Result<Inonum>;
+    fn read_inode(&self, inode: Inonum) -> Result<Vnode>;
+    fn read(&self) -> Result<usize>;
+}
+
+pub trait FileSystemSetup {
+    fn try_init(driver: Arc<Partition>) -> Result<Option<Arc<Self>>>;
+}
+
+// TODO refactor to be more efficient
+// optimize heap access, like a pointer ?
+type FsVec = Vec<Arc<dyn Filesystem>>;
+use alloc::vec::Vec;
+static mut FILESYSTEMS: FsVec = vec![];
+pub fn get_filesystems() -> &'static mut FsVec {
+    unsafe { &mut *core::ptr::addr_of_mut!(FILESYSTEMS) }
+}
+
 impl Path {
     /// Creates a new Path object from a string slice
     pub fn new(path: &str) -> Path {
@@ -60,67 +129,12 @@ impl Path {
         self.buff[0] == b'/'
     }
 }
-// TODO are those types sensible ?
-// This is the virtual inode type
-#[allow(dead_code)]
-pub struct Vnode {
-    // Inode number, unique identifier on the target filesystem
-    inode: u32,
-
-    uid: u32,
-    gid: u32,
-    mode: u32,
-
-    kind: VnodeType,
-
-    // TODO add timestamps
-    fops: Arc<dyn FileIO>
-    
-}
-
-// Directory entry, points to a single inode
-#[allow(dead_code)]
-pub struct Dentry {
-    vnode: Arc<Vnode>,
-    path: Path,
-}
-
-// File descriptor structure
-#[allow(dead_code)]
-pub struct File {
-    dentry: Arc<Dentry>,
-    f_pos: u64,
-}
 
 impl File {
     // pub fn read(&self) {
     //     // call driver
     //     self.dentry.vnode.driver.read();
     // }
-}
-
-pub type Inonum = u64;
-
-// Every filestystem will expose this API
-// It is the interface between them and the VFS layer
-#[allow(dead_code)]
-pub trait Filesystem {
-    fn get_root_inode(&self) -> Result<Inonum>;
-    fn read_inode(&self, inode: Inonum) -> Result<Vnode>;
-    fn read(&self) -> Result<usize>;
-}
-
-pub trait FileSystemSetup {
-    fn try_init(driver: Arc<Partition>) -> Result<Option<Arc<Self>>>;
-}
-
-// TODO refactor to be more efficient
-// optimize heap access, like a pointer ?
-type FsVec = Vec<Arc<dyn Filesystem>>;
-use alloc::vec::Vec;
-static mut FILESYSTEMS: FsVec = vec![];
-pub fn get_filesystems() -> &'static mut FsVec {
-    unsafe { &mut *core::ptr::addr_of_mut!(FILESYSTEMS) }
 }
 
 // TODO lock?
@@ -163,9 +177,6 @@ pub fn match_mountpoint(path: &Path) -> Arc<Mountpoint> {
     }
 }
 
-pub trait FileIO {
-}
-
 /// Takes a path and returns the corresponding node if any
 pub fn walk_path_node(path: &Path) -> Result<Vnode> {
     dbg!("Here we are in this funciton");
@@ -183,39 +194,33 @@ pub fn walk_path_node(path: &Path) -> Result<Vnode> {
     // empty
     let mut components = path
         .component_iter()
-        .skip(mount.path.component_iter().count() - 1).peekable().into_iter();
+        .skip(mount.path.component_iter().count() - 1)
+        .peekable()
+        .into_iter();
 
-    let inode = mount.fs.get_root_inode()?;
+    let mut inode = mount.fs.get_root_inode()?;
     while let Some(c) = components.next() {
         let node: Vnode = mount.fs.read_inode(inode)?;
-
-        // TODO check access here
-
-        match node.kind {
-            VnodeType::File => {
-                // components left yet we're on a file, error
-                if components.peek().is_none() {
-                    return Err(ENOENT)
-                }
-            },
-            VnodeType::Dir => {
-
-            },
-            VnodeType::FIFO => todo!(),
-            VnodeType::Char => todo!(),
-            VnodeType::Block => todo!(),
-            VnodeType::Symlink => todo!(),
-            VnodeType::Socket => todo!(),
-        }
-        // TODO manage access rights
 
         // empty component means no component
         if c.len() == 0 {
             continue;
         }
         dbg!("Component {}", c);
+
+        if components.peek().is_none() {
+            return  Some(node);
+        }
+
+        // TODO check access here
+
+        inode = node.inode;
+        for dentry in node.dir_iter() {
+
+        }
+
     }
-    Err(EINVAL)
+    panic!("Should return before");
 }
 
 pub fn vfs_open(path: &str) -> Result<File> {

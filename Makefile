@@ -16,7 +16,6 @@ OBJDIR=target/obj # TODO not very clean
 ASM_SOURCES=$(shell find src/ -type f -name '*.S')
 ASM_OBJECTS=$(patsubst src/%.S, target/obj/%.o, $(ASM_SOURCES))
 
-
 LD=ld
 LD_FLAGS=-n -nostdlib -m elf_i386
 LINK_SCRIPT=linker/x86.ld
