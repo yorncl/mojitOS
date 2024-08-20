@@ -14,10 +14,10 @@ pub trait BlockDriver {
 }
 
 /// Block devices are registered here
-static BLOCKS_DEVS: RwLock<Vec<Arc<RwLock<dyn BlockDriver>>>> = RwLock::new(Vec::new());
+static BLOCKS_DRIVERS: RwLock<Vec<Arc<RwLock<dyn BlockDriver>>>> = RwLock::new(Vec::new());
 
 pub fn register_device(dev: Arc<RwLock<dyn BlockDriver>>) {
-    let mut v = BLOCKS_DEVS.write().unwrap();
+    let mut v = BLOCKS_DRIVERS.write().unwrap();
     v.push(dev);
 }
 
@@ -52,18 +52,18 @@ struct MBR {
 /// This enable filesystem drivers to address blocks without thinking about the whole disk
 /// Eventually it might get integrated into/replaced by a request-based system, who knows
 #[allow(dead_code)]
-pub struct Partition {
+pub struct BlockDev {
     block_start: Lba,
     seccount: u64,
-    pub dev: Arc<RwLock<dyn BlockDriver>>,
+    pub driver: Arc<RwLock<dyn BlockDriver>>,
 }
 
-static PARTITIONS: RwLock<Vec<Arc<Partition>>> = RwLock::new(Vec::new());
+static BLOCK_DEVS: RwLock<Vec<Arc<BlockDev>>> = RwLock::new(Vec::new());
 
-impl Partition {
+impl BlockDev {
     #[inline]
     pub fn read(&self, lba: Lba, buffer: &mut [u8]) -> Result<usize> {
-        let driver = self.dev.write().unwrap();
+        let driver = self.driver.write().unwrap();
         // TODO fix this mapping 
         let block_index = self.block_start + lba * 2;
         driver.read(block_index as usize, buffer)
@@ -72,32 +72,32 @@ impl Partition {
 
 // Loop through all the disks and extract filesystems volumes
 pub fn init_fs_from_devices() {
-    let devices = BLOCKS_DEVS.read().unwrap();
-    if devices.len() == 0 {
+    let drivers = BLOCKS_DRIVERS.read().unwrap();
+    if drivers.len() == 0 {
         panic!("No block devices detected, are you sure a drive is connected ?");
     }
 
     let mut buffer = [0 as u8; 512];
-    for dev_lock in devices.iter() {
+    for drv_lock in drivers.iter() {
         // Reading the first sector, and release the lock
-        let dev = dev_lock.write().unwrap();
-        dev.read(0, &mut buffer).unwrap();
-        drop(dev);
+        let drv = drv_lock.write().unwrap();
+        drv.read(0, &mut buffer).unwrap();
+        drop(drv);
 
         // Read first block of device using lba
         // MBR partition
         if buffer[510] == 0x55 && buffer[511] == 0xAA {
-            let mut partitions = PARTITIONS.write().unwrap();
+            let mut block_devs = BLOCK_DEVS.write().unwrap();
             let mbr: &MBR = unsafe { &*(buffer.as_ptr() as *const MBR) };
 
             for i in 0..4 {
                 let mbpart = &mbr.parts[i];
-                let part = Arc::new(Partition {
+                let part = Arc::new(BlockDev {
                     block_start: mbpart.lba_start as Lba,
                     seccount: mbpart.seccount as u64,
-                    dev: dev_lock.clone(),
+                    driver: drv_lock.clone(),
                 });
-                partitions.push(part.clone());
+                block_devs.push(part.clone());
 
                 // check for ext2
                 // superblocka at 1024 offset TODO more clear on block size while addressing

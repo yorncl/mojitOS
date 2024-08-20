@@ -1,7 +1,10 @@
-use super::block::Partition;
+use super::block::BlockDev;
+use core::fmt::Debug;
 use crate::dbg;
 use crate::error::{codes::*, Result};
 use alloc::sync::Arc;
+
+pub const NAME_MAX: usize = 255;
 
 // use to compose other filesystem
 pub struct Info {
@@ -13,7 +16,7 @@ pub struct Info {
 
 #[repr(u8)]
 #[allow(dead_code)]
-enum VnodeType {
+pub enum VnodeType {
     FIFO,
     Char,
     Dir,
@@ -39,44 +42,63 @@ pub struct Path {
 #[allow(dead_code)]
 pub struct Vnode {
     // Inode number, unique identifier on the target filesystem
-    inode: Inonum,
+    pub inode: Inonum,
     uid: u32,
     gid: u32,
     mode: u32,
-    kind: VnodeType,
+    pub kind: VnodeType,
     // TODO add timestamps
     ops: Arc<dyn NodeOps>,
+    pub fs: Arc<dyn Filesystem>,
 }
 
-// Directory entry, points to a single inode
+/// Directory entry, points to a single inode
 #[allow(dead_code)]
 pub struct Dentry {
     vnode: Arc<Vnode>,
-    path: Path,
+    name: [u8; NAME_MAX],
+}
+
+/// The dirent is a small structure used for iteration over directories
+pub struct Dirent  {
+    pub inode: Inonum,
+    pub name: [u8; NAME_MAX],
+    pub size: usize
+}
+
+impl Debug for Dentry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "vfs dentry:  name{}",
+            core::str::from_utf8(self.name.as_slice()).unwrap()
+        )
+    }
 }
 
 // File descriptor structure
 #[allow(dead_code)]
 pub struct File {
-    dentry: Arc<Dentry>,
-    pos: u64,
-    ops: Arc<dyn FileOps>,
+    pub dentry: Arc<Dentry>,
+    pub pos: u64,
+    pub ops: Arc<dyn FileOps>,
 }
 
 // Operations traits
 // Those trait will be implemnted by each filesysystem
 // They will provide the callbacks to filesystem-specific operations
 
-/// Iinterface for Vnode operations
+/// Interface for Vnode operations
 pub trait NodeOps {
-    fn open(&self) -> Result<Option<File>> { Err(ENOSYS) }
+    fn open(&self, node: &Arc<Vnode>, dentry: &Arc<Dentry>) -> Result<File>;
 }
 
 /// Interface for file descriptor operations
 pub trait FileOps {
-    fn readdir(&self) -> Result<Option<Dentry>> { Err(ENOSYS) }
+    fn readdir(&mut self) -> Result<Option<Dirent>> {
+        Err(ENOSYS)
+    }
 }
-
 
 // Every filestystem will expose this API
 // It is the interface between them and the VFS layer
@@ -84,11 +106,12 @@ pub trait FileOps {
 pub trait Filesystem {
     fn get_root_inode(&self) -> Result<Inonum>;
     fn read_inode(&self, inode: Inonum) -> Result<Vnode>;
-    fn read(&self) -> Result<usize>;
 }
 
 pub trait FileSystemSetup {
-    fn try_init(driver: Arc<Partition>) -> Result<Option<Arc<Self>>>;
+    // Will return an option if there is no IO error
+    // The option will contain None if the filesystem isn't matching
+    fn try_init(driver: Arc<BlockDev>) -> Result<Option<Arc<Self>>>;
 }
 
 // TODO refactor to be more efficient
@@ -128,13 +151,6 @@ impl Path {
     pub fn absolute(&self) -> bool {
         self.buff[0] == b'/'
     }
-}
-
-impl File {
-    // pub fn read(&self) {
-    //     // call driver
-    //     self.dentry.vnode.driver.read();
-    // }
 }
 
 // TODO lock?
@@ -178,7 +194,7 @@ pub fn match_mountpoint(path: &Path) -> Arc<Mountpoint> {
 }
 
 /// Takes a path and returns the corresponding node if any
-pub fn walk_path_node(path: &Path) -> Result<Vnode> {
+pub fn walk_path_node(path: &Path) -> Result<Arc<Dentry>> {
     dbg!("Here we are in this funciton");
     // TODO handle properly
     assert!(
@@ -198,29 +214,44 @@ pub fn walk_path_node(path: &Path) -> Result<Vnode> {
         .peekable()
         .into_iter();
 
-    let mut inode = mount.fs.get_root_inode()?;
-    while let Some(c) = components.next() {
-        let node: Vnode = mount.fs.read_inode(inode)?;
+    let mut inode = Some(mount.fs.get_root_inode()?);
+    let mut node = Arc::new(mount.fs.read_inode(inode.unwrap())?);
+    let mut dentry = Arc::new(Dentry {
+        vnode: node,
+        name: [0 as u8; NAME_MAX]
+    });
+    // Opening the root inode
 
+    // Walk the path
+    while let Some(comp) = components.next() {
         // empty component means no component
-        if c.len() == 0 {
+        if comp.len() == 0 {
             continue;
         }
-        dbg!("Component {}", c);
-
-        if components.peek().is_none() {
-            return  Some(node);
-        }
-
         // TODO check access here
 
-        inode = node.inode;
-        for dentry in node.dir_iter() {
+        //TODO locking concurrency ?
+        let file = node.ops.open(&dentry)?;
+        dbg!("Listing dir from {}", comp);
 
+        inode = None;
+        while let Some(dentry) = file.ops.readdir()? {
+            dbg!("dentry {:?}", dentry);
+            // Match
+            if comp.as_bytes() == dentry.name.as_slice() {
+                inode = Some(dentry.vnode.inode);
+                break;
+            }
+        }
+        // No match in directory entries
+        if inode.is_none() {
+            return Err(ENOENT);
         }
 
+        // read the child's inode
+        node = mount.fs.read_inode(inode.unwrap())?;
     }
-    panic!("Should return before");
+    Ok(dentry)
 }
 
 pub fn vfs_open(path: &str) -> Result<File> {

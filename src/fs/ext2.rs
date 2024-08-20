@@ -1,12 +1,14 @@
+use crate::dbg;
+use crate::error::{codes::*, Result};
+use crate::fs::block::{Lba, BlockDev};
+use crate::fs::vfs::{
+    Dentry, Dirent, File, FileOps, FileSystemSetup, Filesystem, Info, Inonum, NodeOps, Vnode,
+    VnodeType, NAME_MAX,
+};
+use alloc::sync::Arc;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use core::mem::size_of;
-use crate::dbg;
-use crate::fs::block::{Lba, Partition};
-use crate::fs::vfs::{Vnode, Dentry, Info, FileSystemSetup, Filesystem, Inonum, FileOps, NodeOps};
-use crate::error::{Result, codes::*};
-use alloc::sync::Arc;
-
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
@@ -110,46 +112,6 @@ impl Ext2Dentry {
     }
 }
 
-/// Wrapper around a raw buffer containing directory entries
-/// Implements the iterator trait for ergonnomics
-pub struct DirBlock<'a> {
-    ptr: *const u8,
-    boundary: usize,
-    _marker: PhantomData<&'a ()>,
-}
-
-impl<'a> DirBlock<'a> {
-    pub fn new(ptr: *const u8, size: usize) -> DirBlock<'a> {
-        DirBlock {
-            ptr,
-            boundary: (ptr as usize) + size,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<'a> Iterator for DirBlock<'a> {
-    type Item = &'a Ext2Dentry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if (self.ptr as usize) >= self.boundary {
-            return None;
-        }
-        let entry = unsafe { &*(self.ptr as *const Ext2Dentry) };
-        if entry.inode == 0 {
-            return None;
-        }
-        let mut total_size = size_of::<Dentry>() as isize
-            + core::cmp::max(entry.lb_name_length as isize - 4, 0) as isize;
-
-        // Round up to the next u32 boundary
-        total_size = (total_size + 3) & !3;
-
-        self.ptr = unsafe { self.ptr.offset(total_size) };
-        return Some(entry);
-    }
-}
-
 impl Debug for Ext2Dentry {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
@@ -168,7 +130,7 @@ impl Debug for Ext2Dentry {
 pub struct Ext2 {
     info: Info,
     sb: SuperBlock,
-    part: Arc<Partition>,
+    block_dev: Arc<BlockDev>,
 }
 
 impl Ext2 {
@@ -186,7 +148,7 @@ impl Ext2 {
         let table_block_offset = (inode_table_i as usize as usize * size_of::<Inode>()) / 1024;
         inode_table_i -= inode_per_block * table_block_offset;
 
-        self.part.read(
+        self.block_dev.read(
             (bgd.inode_table as usize + table_block_offset) as Lba,
             &mut buffer,
         )?;
@@ -201,22 +163,13 @@ impl Ext2 {
     }
 
     fn get_bg_descriptor(&self, index: usize) -> Result<BGDescriptor> {
+        // TODO Figure out the buffer situation
         let mut buffer = [0 as u8; 1024];
 
-        dbg!("INODES PER GROUP {}", { self.sb.inodes_per_group });
-
-        // let block_addr = self.sb.superblock_index as Lba
-        //     + ((index * size_of::<BGDescriptor>()) / self.info.block_size) as Lba
-        //     + 1;
+        // TODO shouldn't be hardcorded
         let block_addr = 2;
         let bgd_offset = ((index * size_of::<BGDescriptor>()) % self.info.block_size) as usize;
-        dbg!(
-            "index {} Block addr {}, offset {}",
-            index,
-            block_addr,
-            bgd_offset
-        );
-        self.part.read(block_addr, &mut buffer)?;
+        self.block_dev.read(block_addr, &mut buffer)?;
         Ok(unsafe { *(buffer.as_ptr().offset(bgd_offset as isize) as *const BGDescriptor) })
     }
 }
@@ -238,12 +191,12 @@ impl Ext2 {
 // }
 
 impl FileSystemSetup for Ext2 {
-    fn try_init(part: Arc<Partition>) -> Result<Option<Arc<Ext2>>> {
+    fn try_init(dev: Arc<BlockDev>) -> Result<Option<Arc<Ext2>>> {
         let mut buffer = [0 as u8; 1024];
 
         // Read the superblock
         // TODO I'm not clear on the buffer size still
-        part.read(1, &mut buffer)?;
+        dev.read(1, &mut buffer)?;
         let sb = unsafe { &*(buffer.as_ptr() as *const SuperBlock) };
 
         if sb.ext2_signature != 0xef53 {
@@ -262,7 +215,7 @@ impl FileSystemSetup for Ext2 {
                 block_size: 1024 << { sb.block_size_log2 },
             },
             sb: sb.clone(),
-            part: part.clone(),
+            block_dev: dev.clone(),
         };
         Ok(Some(Arc::new(fs)))
     }
@@ -278,19 +231,66 @@ impl Filesystem for Ext2 {
 
     fn read_inode(&self, inode: Inonum) -> Result<Vnode> {
         // self.driver.read
-        let _ = self.get_inode_lba(inode);
+        let _ = self.get_inode(inode);
         todo!();
-    }
-
-    fn read(&self) -> Result<usize> {
-        unimplemented!()
     }
 }
 
+pub struct Ext2NodeOps {}
+pub struct Ext2File {}
 
-pub struct InodeOps {}
-pub struct Dir {}
-pub struct File {}
+/// Interface implmenting FileOps for the vfs
+pub struct Ext2Dir {
+    inode: Inonum,
+    /// Block index will be mapped to a block pointer field in the inode struct
+    /// inode.block_ptr[0-11] is 0-11
+    /// inode singly[0][0] is 12
+    /// inode singly[0][1] is 13
+    /// ...
+    block_index: u32,
+    buffer: [u8; 1024],
+}
 
-impl FileOps for Ext2FileOps {
+impl NodeOps for Ext2NodeOps {
+    fn open(&self, node: &Arc<Vnode>, dent: &Arc<Dentry>) -> Result<File> {
+        let ops = match node.kind {
+            VnodeType::FIFO => todo!(),
+            VnodeType::Char => todo!(),
+            VnodeType::Dir => Arc::new(Ext2Dir {
+                inode: node.inode,
+                block_index: 0,
+                buffer: [0 as u8; 1024],
+            }),
+            VnodeType::Block => todo!(),
+            VnodeType::File => todo!(),
+            VnodeType::Symlink => todo!(),
+            VnodeType::Socket => todo!(),
+        };
+
+        Ok(File {
+            dentry: dent.clone(),
+            pos: 0,
+            ops,
+        })
+    }
+}
+
+impl FileOps for Ext2File {}
+
+impl FileOps for Ext2Dir {
+    fn readdir(&mut self) -> Result<Option<Dirent>> {
+        let mut dirent: Dirent;
+
+        let inode = self.
+
+        if let Some(dir) = self.it.next() {
+            dirent = Dirent {
+                inode: dir.inode as Inonum,
+                name: [0 as u8; NAME_MAX],
+            };
+            dirent.name.clone_from_slice(dir.name().unwrap().as_bytes());
+            return Ok(Some(dirent));
+        }
+        Ok(None)
+    }
 }
