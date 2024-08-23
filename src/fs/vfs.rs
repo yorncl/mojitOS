@@ -1,8 +1,9 @@
 use super::block::BlockDev;
-use core::fmt::Debug;
 use crate::dbg;
 use crate::error::{codes::*, Result};
 use alloc::sync::Arc;
+use alloc::boxed::Box;
+use core::fmt::Debug;
 
 pub const NAME_MAX: usize = 255;
 
@@ -38,18 +39,17 @@ pub struct Path {
 }
 
 // TODO are those types sensible ?
-// This is the virtual inode type
+/// The virtual inode type
 #[allow(dead_code)]
 pub struct Vnode {
-    // Inode number, unique identifier on the target filesystem
+    /// Inode number, unique identifier on the target filesystem
     pub inode: Inonum,
-    uid: u32,
-    gid: u32,
-    mode: u32,
+    pub uid: u16,
+    pub gid: u16,
+    pub mode: u16,
     pub kind: VnodeType,
     // TODO add timestamps
-    ops: Arc<dyn NodeOps>,
-    pub fs: Arc<dyn Filesystem>,
+    pub ops: Arc<dyn NodeOps>,
 }
 
 /// Directory entry, points to a single inode
@@ -57,13 +57,6 @@ pub struct Vnode {
 pub struct Dentry {
     vnode: Arc<Vnode>,
     name: [u8; NAME_MAX],
-}
-
-/// The dirent is a small structure used for iteration over directories
-pub struct Dirent  {
-    pub inode: Inonum,
-    pub name: [u8; NAME_MAX],
-    pub size: usize
 }
 
 impl Debug for Dentry {
@@ -76,12 +69,30 @@ impl Debug for Dentry {
     }
 }
 
+/// The dirent is a small structure used for iteration over directories
+pub struct Dirent {
+    pub inode: Inonum,
+    pub name: [u8; NAME_MAX],
+    pub size: usize,
+}
+
+impl Debug for Dirent {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "dirent:  name{}",
+            core::str::from_utf8(self.name.as_slice()).unwrap()
+        )
+    }
+}
+
+
 // File descriptor structure
 #[allow(dead_code)]
 pub struct File {
     pub dentry: Arc<Dentry>,
     pub pos: u64,
-    pub ops: Arc<dyn FileOps>,
+    pub ops: Box<dyn FileOps>,
 }
 
 // Operations traits
@@ -90,11 +101,16 @@ pub struct File {
 
 /// Interface for Vnode operations
 pub trait NodeOps {
-    fn open(&self, node: &Arc<Vnode>, dentry: &Arc<Dentry>) -> Result<File>;
+    fn open(&self, node: &Vnode, dentry: &Arc<Dentry>) -> Result<File>;
 }
 
 /// Interface for file descriptor operations
 pub trait FileOps {
+
+    fn open(&mut self) -> Result<()> {
+        Err(ENOSYS)
+    }
+
     fn readdir(&mut self) -> Result<Option<Dirent>> {
         Err(ENOSYS)
     }
@@ -216,11 +232,14 @@ pub fn walk_path_node(path: &Path) -> Result<Arc<Dentry>> {
 
     let mut inode = Some(mount.fs.get_root_inode()?);
     let mut node = Arc::new(mount.fs.read_inode(inode.unwrap())?);
+    // Opening the root inode
+
+
+    // TODO check access here
     let mut dentry = Arc::new(Dentry {
         vnode: node,
-        name: [0 as u8; NAME_MAX]
+        name: [0; NAME_MAX],
     });
-    // Opening the root inode
 
     // Walk the path
     while let Some(comp) = components.next() {
@@ -228,28 +247,33 @@ pub fn walk_path_node(path: &Path) -> Result<Arc<Dentry>> {
         if comp.len() == 0 {
             continue;
         }
-        // TODO check access here
 
         //TODO locking concurrency ?
-        let file = node.ops.open(&dentry)?;
+        let mut file = dentry.vnode.ops.open(&dentry.vnode, &dentry)?;
+        // TODO check if really useful
+        file.ops.open()?;
         dbg!("Listing dir from {}", comp);
 
         inode = None;
-        while let Some(dentry) = file.ops.readdir()? {
-            dbg!("dentry {:?}", dentry);
+        while let Some(dirent) = file.ops.readdir()? {
+            dbg!("dentry {:?}", dirent);
             // Match
-            if comp.as_bytes() == dentry.name.as_slice() {
-                inode = Some(dentry.vnode.inode);
+            if comp.as_bytes() == dirent.name.as_slice() {
+                inode = Some(dirent.inode);
                 break;
             }
         }
-        // No match in directory entries
-        if inode.is_none() {
+        // if match, read the child's inode
+        if let Some(i) = inode {
+            node = Arc::new(mount.fs.read_inode(i)?);
+            dentry = Arc::new(Dentry {
+                vnode: node,
+                name: [0; NAME_MAX],
+            });
+        } else {
+            // else no match
             return Err(ENOENT);
         }
-
-        // read the child's inode
-        node = mount.fs.read_inode(inode.unwrap())?;
     }
     Ok(dentry)
 }

@@ -5,7 +5,6 @@
 #![test_runner(crate::test_runner)]
 #![feature(core_intrinsics)]
 #![allow(internal_features)]
-#![feature(asm_const)]
 
 #[macro_use]
 extern crate alloc;

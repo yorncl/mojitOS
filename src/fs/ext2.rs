@@ -1,13 +1,12 @@
-use crate::dbg;
 use crate::error::{codes::*, Result};
-use crate::fs::block::{Lba, BlockDev};
+use crate::fs::block::{BlockDev, Lba};
 use crate::fs::vfs::{
     Dentry, Dirent, File, FileOps, FileSystemSetup, Filesystem, Info, Inonum, NodeOps, Vnode,
     VnodeType, NAME_MAX,
 };
 use alloc::sync::Arc;
+use alloc::boxed::Box;
 use core::fmt::Debug;
-use core::marker::PhantomData;
 use core::mem::size_of;
 
 #[repr(C, packed)]
@@ -69,6 +68,151 @@ pub struct Inode {
     size_upper: u32,
     frag: u32,
     os_frag: [u8; 12],
+}
+
+#[derive(Copy, Clone)]
+struct InoBlockBuff {
+    // index of current cached buffer
+    curr: Option<Lba>,
+    // TODO concurrency issues with cached values, clean up
+    data: [u32; NL0],
+}
+
+impl InoBlockBuff {
+    #[inline]
+    fn to_u8(&mut self) -> &mut [u8; NL0 * 4] {
+        unsafe { &mut *(self.data.as_ptr() as *const u8 as *mut [u8; NL0 * 4]) }
+    }
+
+    /// Get an entry in buffer
+    #[inline]
+    fn get(&self, index: usize) -> Option<Lba> {
+        let lba = self.data[index] as Lba;
+        if lba == 0 {
+            return None;
+        }
+        Some(lba)
+    }
+}
+
+/// Interface to get blocks address in a linear fashion from a block index
+struct InoBlocks {
+    index: usize,
+    // Cached buffers for each level
+    // singly, doubly, triply
+    buff: [InoBlockBuff; 3],
+    driver: Arc<BlockDev>,
+}
+
+// Constants for number of accessible blocks through X dereference
+// singly
+const NL0: usize = 1024 / core::mem::size_of::<u32>();
+// doubly
+const NL1: usize = NL0 * NL0;
+// triply
+const NL2: usize = NL0 * NL0 * NL0;
+// TODO test case for large files
+impl InoBlocks {
+    /// Takes a linear block address and returns the LBA if it exists
+    fn get_lba(&mut self, inode: &Inode, block_index: usize) -> Result<Option<Lba>> {
+        // let i = self.block_index as usize;
+        // block_ptr fields are straighforward
+        if block_index < 12 {
+            return Ok(Some(inode.block_ptr[block_index] as Lba));
+        }
+
+        // offset the index
+        let index = block_index - 12;
+        let mut addr: Option<Lba> = None;
+        // Match and check within which range it is
+        match index {
+            // singly
+            0..NL0 => {
+                addr = self.get_singly(inode, index)?;
+            }
+            // doubly
+            NL0..NL1 => {
+                addr = self.get_doubly(inode, index - NL0)?;
+            }
+            // triply
+            NL1..NL2 => {
+                addr = self.get_triply(inode, index - NL0 - NL1)?;
+            }
+            _ => {}
+        }
+        Ok(addr)
+    }
+
+    fn load_buff(&mut self, index: usize, lba: Lba) -> Result<()> {
+        let curr = self.buff[index].curr;
+        // load if not cached
+        if curr.is_none() || curr.unwrap() != lba {
+            self.driver.read(lba, self.buff[index].to_u8())?;
+            // setting the last cached buffer
+            self.buff[index].curr = Some(lba);
+        }
+        Ok(())
+    }
+
+    // Fetch the singly buffer and returns the Lba at index
+    fn get_singly(&mut self, inode: &Inode, index: usize) -> Result<Option<Lba>> {
+        if inode.sinlgly_ptr == 0 {
+            return Ok(None);
+        }
+        // If not cached, fetch it
+        self.load_buff(0, inode.sinlgly_ptr as Lba)?;
+
+        // Get the lba at index
+        Ok(self.buff[0].get(index))
+    }
+
+    // Fetch the doubly buffer and returns the Lba at index
+    fn get_doubly(&mut self, inode: &Inode, index: usize) -> Result<Option<Lba>> {
+        if inode.doubly_ptr == 0 {
+            return Ok(None);
+        }
+        // Load first level
+        self.load_buff(0, inode.doubly_ptr as Lba)?;
+        if let Some(lba) = self.buff[0].get(index/NL0) {
+            // Load second level
+            self.load_buff(1, lba)?;
+            return Ok(self.buff[1].get(index%NL0));
+        }
+        Ok(None)
+    }
+
+    // Fetch the triply buffer and returns the Lba at index
+    fn get_triply(&mut self, inode: &Inode, index: usize) -> Result<Option<Lba>> {
+        if inode.doubly_ptr == 0 {
+            return Ok(None);
+        }
+
+        // Load first level
+        self.load_buff(0, inode.doubly_ptr as Lba)?;
+        if let Some(lba) = self.buff[0].get(index/NL1) {
+            // Load second level
+            self.load_buff(1, lba)?;
+            if let Some(lba) = self.buff[1].get((index%NL1)/NL0) {
+                // Load third level
+                self.load_buff(2, lba)?;
+                return Ok(self.buff[2].get(index%NL0));
+            }
+        }
+        Ok(None)
+    }
+}
+
+impl Inode {
+    fn blocks(&'_ self, drv: Arc<BlockDev>) -> InoBlocks {
+        InoBlocks {
+            index: 0,
+            buff: [InoBlockBuff {
+                curr: None,
+                data: [0; NL0],
+            }; 3],
+            driver: drv,
+        }
+    }
 }
 
 #[repr(C, packed)]
@@ -174,22 +318,6 @@ impl Ext2 {
     }
 }
 
-// pub struct FileIO {
-//     inode: Arc<Inode>
-// }
-// pub struct DirIO {
-//     inode: Arc<Inode>
-// }
-
-// impl FileIO for DirIO {
-
-//     fn readdir(&self) -> Result<Option<Dentry>> {
-//         self.part.read(inode.block_ptr[0] as Lba, &mut buffer)?;
-//         let db = DirBlock::new(buffer.as_ptr() as *const u8, 1024);
-//         Err(ENOSYS)
-//     }
-// }
-
 impl FileSystemSetup for Ext2 {
     fn try_init(dev: Arc<BlockDev>) -> Result<Option<Arc<Ext2>>> {
         let mut buffer = [0 as u8; 1024];
@@ -221,7 +349,7 @@ impl FileSystemSetup for Ext2 {
     }
 }
 
-impl Filesystem for Ext2 {
+impl Filesystem for Arc<Ext2> {
     // TODO handle other ext2 versions
     fn get_root_inode(&self) -> Result<Inonum> {
         // TODO this will be offsetted by -1, maybe not clear enough
@@ -231,35 +359,46 @@ impl Filesystem for Ext2 {
 
     fn read_inode(&self, inode: Inonum) -> Result<Vnode> {
         // self.driver.read
-        let _ = self.get_inode(inode);
-        todo!();
+        let raw_inode = self.get_inode(inode)?;
+        let kind = {
+            if raw_inode.mode & 0x4000 != 0 {
+                VnodeType::Dir
+            } else if raw_inode.mode & 0x8000 != 0 {
+                VnodeType::File
+            } else {
+                panic!("Unimplemented inode mode {:x}", { raw_inode.mode })
+            }
+        };
+
+        Ok(Vnode {
+            inode,
+            uid: raw_inode.uid,
+            gid: raw_inode.guid,
+            mode: raw_inode.mode,
+            kind,
+            ops: Arc::new(Ext2NodeOps { fs: self.clone() }),
+        })
     }
 }
 
-pub struct Ext2NodeOps {}
+pub struct Ext2NodeOps {
+    fs: Arc<Ext2>,
+}
 pub struct Ext2File {}
 
-/// Interface implmenting FileOps for the vfs
-pub struct Ext2Dir {
-    inode: Inonum,
-    /// Block index will be mapped to a block pointer field in the inode struct
-    /// inode.block_ptr[0-11] is 0-11
-    /// inode singly[0][0] is 12
-    /// inode singly[0][1] is 13
-    /// ...
-    block_index: u32,
-    buffer: [u8; 1024],
-}
-
 impl NodeOps for Ext2NodeOps {
-    fn open(&self, node: &Arc<Vnode>, dent: &Arc<Dentry>) -> Result<File> {
+    fn open(&self, node: &Vnode, dent: &Arc<Dentry>) -> Result<File> {
+        let inode = self.fs.get_inode(node.inode)?;
         let ops = match node.kind {
             VnodeType::FIFO => todo!(),
             VnodeType::Char => todo!(),
-            VnodeType::Dir => Arc::new(Ext2Dir {
-                inode: node.inode,
+            VnodeType::Dir => Box::new(Ext2Dir {
+                inum: node.inode,
+                inode,
                 block_index: 0,
-                buffer: [0 as u8; 1024],
+                fs: self.fs.clone(),
+                blocks: inode.blocks(self.fs.block_dev.clone()),
+                buff: DirBuff { offset: 0, curr: 0, data: [0; 1024]}
             }),
             VnodeType::Block => todo!(),
             VnodeType::File => todo!(),
@@ -275,22 +414,60 @@ impl NodeOps for Ext2NodeOps {
     }
 }
 
+
 impl FileOps for Ext2File {}
 
+pub struct DirBuff {
+    offset: usize,
+    curr: Lba,
+    data: [u8; 1024],
+}
+
+/// Interface implmenting FileOps for the vfs
+pub struct Ext2Dir {
+    inum: Inonum,
+    inode: Inode,
+    block_index: usize,
+    fs: Arc<Ext2>,
+    blocks: InoBlocks,
+    buff: DirBuff
+}
+
 impl FileOps for Ext2Dir {
+
+    fn open(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn readdir(&mut self) -> Result<Option<Dirent>> {
-        let mut dirent: Dirent;
-
-        let inode = self.
-
-        if let Some(dir) = self.it.next() {
-            dirent = Dirent {
-                inode: dir.inode as Inonum,
-                name: [0 as u8; NAME_MAX],
-            };
-            dirent.name.clone_from_slice(dir.name().unwrap().as_bytes());
-            return Ok(Some(dirent));
+        // get lba from linear block index
+        let r = self.blocks.get_lba(&self.inode, self.block_index)?;
+        if r.is_none() {return Ok(None)}
+        let lba = r.unwrap();
+        // If the lba is not the one cached
+        if lba != self.buff.curr {
+            // fetch the data
+            self.fs.block_dev.read(lba, &mut self.buff.data)?;
+            self.buff.curr = lba;
+            self.buff.offset = 0;
         }
-        Ok(None)
+
+        let dentry: &Ext2Dentry = unsafe {
+            &*(&self.buff.data[self.buff.offset] as *const u8 as *const Ext2Dentry)
+        };
+
+        let mut dirent = Dirent {
+            inode: dentry.inode as Inonum,
+            name: [0 as u8; NAME_MAX],
+            size: dentry.size as usize
+        };
+        dirent.name.clone_from_slice(dentry.name().unwrap().as_bytes());
+        // offset by the entry size
+        self.buff.offset += dirent.size;
+        // If end of dirent for current block, go to next block
+        if self.buff.offset == 1024 {
+            self.block_index += 1;
+        }
+        return Ok(Some(dirent));
     }
 }

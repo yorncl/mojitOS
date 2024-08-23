@@ -104,7 +104,8 @@ pub fn init_fs_from_devices() {
                 match ext2::Ext2::try_init(part.clone()) {
                     Ok(val) => {
                         if val.is_some() {
-                            vfs::get_filesystems().push(val.unwrap());
+                            // TODO ugggh remove the arc new, change the architecture or something
+                            vfs::get_filesystems().push(Arc::new(val.unwrap()));
                             klog!("  Registered an ext2 filesystem");
                         }
                     }
