@@ -3,7 +3,6 @@ set -e
 rm -f disk.img
 
 #wildcards are forbidden in guestfish, so we need to list the dirs in advance
-DIRS=$(find iso  -maxdepth 1 -mindepth 1 -type d | grep -v boot | tr '\n' ' ')
 
 guestfish -N disk.img=disk:30M <<EOF
 
@@ -16,15 +15,16 @@ mkfs vfat /dev/sda1
 mkfs ext2 /dev/sda2
 
 mount /dev/sda2 /
-copy-in $DIRS /
+copy-in iso/home /
+copy-in iso/etc /
 
 mkdir /boot
-
 mount /dev/sda1 /boot
-grub-install / /dev/sda
 
-copy-in mojitos.elf /boot
+mkdir /boot/grub
 copy-in iso/boot/grub/grub.cfg /boot/grub
+
+grub-install / /dev/sda
 EOF
 
 # if one day I get crazy and want to install grub2 manually
