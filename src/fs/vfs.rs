@@ -211,7 +211,6 @@ pub fn match_mountpoint(path: &Path) -> Arc<Mountpoint> {
 
 /// Takes a path and returns the corresponding node if any
 pub fn walk_path_node(path: &Path) -> Result<Arc<Dentry>> {
-    dbg!("Here we are in this funciton");
     // TODO handle properly
     assert!(
         path.absolute() && !path.buff.contains(&b'.'),
@@ -248,6 +247,7 @@ pub fn walk_path_node(path: &Path) -> Result<Arc<Dentry>> {
             continue;
         }
 
+        dbg!("path component: {}", comp);
         //TODO locking concurrency ?
         let mut file = dentry.vnode.ops.open(&dentry.vnode, &dentry)?;
         // TODO check if really useful

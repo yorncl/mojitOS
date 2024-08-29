@@ -4,7 +4,7 @@ extern exception_handler
 extern CONTEXT_CHANGE
 extern NEED_SCHED
 
-%macro interrupt_handler 1
+%macro interrupt_handler_wrap 1
 interrupt_wrapper_%1:
 
   ; General purpose registers
@@ -18,7 +18,7 @@ interrupt_wrapper_%1:
   iret
 %endmacro
 
-%macro exception_handler 1
+%macro exception_handler_wrap 1
 exception_wrapper_%1:
 
   ; General purpose registers
@@ -31,13 +31,13 @@ exception_wrapper_%1:
 
 %assign i 0
 %rep 32
-exception_handler i
+exception_handler_wrap i
 %assign i i+1
 %endrep
 
 %assign i 32
 %rep 224
-interrupt_handler i
+interrupt_handler_wrap i
 %assign i i+1
 %endrep
 
@@ -70,7 +70,7 @@ fill_idt:
   push ebx
 
   mov ebx, 0
-  ; This macro will be repeated 256 times
+
   %assign i 0
   %rep 32
   fill_entry_exception i

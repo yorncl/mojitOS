@@ -1,7 +1,9 @@
+use crate::klib::mem::memset;
 use crate::memory::{pmm, PAGE_SIZE};
 use crate::memory::vmm::mapper;
 use crate::MB;
-use crate::{ROUND_PAGE_UP, ROUND_PAGE_DOWN, klog};
+use crate::{ROUND_PAGE_UP, ROUND_PAGE_DOWN};
+use core::ffi::c_void;
 
 // TODO extremely primitive memory management
 
@@ -21,12 +23,22 @@ impl BumpMMIO {
     }
 }
 
-static mut IOMM: BumpMMIO = BumpMMIO{ start: super::KERNEL_IOMM_START, size: 0 };
+static mut IOMM: BumpMMIO = BumpMMIO{ 
+    start: super::KERNEL_IOMM_START + PAGE_SIZE,
+    size: 0,
+};
+
+pub fn init() -> Result<(), ()>{
+    //TOOD early boot allocation to facilitate everything
+    // Allocate a page for self storage
+    mapper::map_single_kernel(pmm::alloc_page().unwrap(), super::KERNEL_IOMM_START)?;
+    memset(super::KERNEL_IOMM_START as *mut c_void, 0, PAGE_SIZE);
+    Ok(())
+}
 
 // Mapping a page to a physical address
 // Mainly used for MMIO
 pub fn remap_phys(phys_addr: usize, size: usize) -> Result<usize, &'static str> {
-    
     // TODO better way to do this ?
     // here, we lose the bytes below the requested address due to alignment
     let phys_start = ROUND_PAGE_DOWN!(phys_addr);
@@ -37,15 +49,11 @@ pub fn remap_phys(phys_addr: usize, size: usize) -> Result<usize, &'static str> 
         match IOMM.allocate(nframes) {
             Ok(vptr) => {
                 let range = pmm::get_phys_frames(phys_start, nframes);
-                klog!("AFTER PHYS RANGE phys_start: {:x}", range.start.0 * PAGE_SIZE);
-
                 // TODO Extremely bad error management
                 // might have to redo the whole system more cleanly soon
-                mapper::map_range_kernel(range, vptr).unwrap();
+                mapper::map_range_kernel(range, vptr).or(Err("Cannot map range kernel"));
                 // adding the offset so that we get the address we needed for the structure
                 let offset = phys_addr - phys_start;
-                klog!("vptr: {:x}", vptr);
-                klog!("offset: {}", offset);
                 return Ok(vptr + offset);
             },
             Err(msg) => return Err(msg)

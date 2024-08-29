@@ -1,5 +1,5 @@
 use crate::x86::iomem;
-use crate::{klog, PAGE_SIZE};
+use crate::{dbg, PAGE_SIZE};
 
 use super::util;
 use core::mem::size_of;
@@ -96,29 +96,29 @@ pub fn end_of_interrupt() {
 pub fn enable_ioapic_interrupts() {
     let low = ioapic_read_reg(0x12);
     let high = ioapic_read_reg(0x13);
-    klog!("IOAPIC INT 1 Low {:x}", low);
-    klog!("IOAPIC INT 1 High {:x}", high);
+    dbg!("IOAPIC INT 1 Low {:x}", low);
+    dbg!("IOAPIC INT 1 High {:x}", high);
     // read apic id
     let id = lapic_read_reg(RegLapic::ApicId);
     // TODO handle the destination correctly
-    klog!("LAPIC id {:x}", id);
+    dbg!("LAPIC id {:x}", id);
 
     // TODO reserve ISA IRQs
     ioapic_write_reg(0x12, 42);
 
     // setting 11th bit of apic base to enable apic TODO sould be done
     // let (low, high) = util::readmsr(0x1b);
-    // klog!("Low and high {} {}", low, high);
+    // dbg!("Low and high {} {}", low, high);
 
     // ioapic_read_reg(0x13,);
-    // klog!("IOAPIC INT 1 Low {:x}", low);
-    // klog!("IOAPIC INT 1 High {:x}", high);
+    // dbg!("IOAPIC INT 1 Low {:x}", low);
+    // dbg!("IOAPIC INT 1 High {:x}", high);
 }
 
 pub fn enable_lapic() {
     let (low, _high) = util::readmsr(util::msrid::LOCAL_APIC_BASE);
     let base = low as u32 & !0xfff;
-    klog!("MSR READING FOR LAPIC {:x}", base);
+    dbg!("MSR READING FOR LAPIC {:x}", base);
     match iomem::remap_phys(base as usize, PAGE_SIZE) {
         Ok(ptr) => unsafe {
             LAPIC_REMAP = ptr;
@@ -135,11 +135,11 @@ pub fn enable_lapic() {
 // Parse the MADT table
 // Find the IO APIC address
 pub fn parse_madt(address: *const ACPISDTHeader) {
-    klog!("APIC init start with addres {:p}", address);
+    dbg!("APIC init start with addres {:p}", address);
 
     unsafe {
         let lapic: *const LAPIC = (address as usize + size_of::<ACPISDTHeader>()) as *const LAPIC;
-        klog!(
+        dbg!(
             "LAPIC adress {:x} flags :{}",
             (*lapic).address,
             (*lapic).flags
@@ -161,9 +161,9 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
                         panic!("More than 1 IOAPIC detected!")
                     }
                     let ioptr: &EntryIOAPIC = &*(entry_addr as *const EntryIOAPIC);
-                    klog!("IOAPIC id {:x}", { ioptr.id });
-                    klog!("IOAPIC base {:x}", { ioptr.address });
-                    klog!("IOAPIC gib {:x}", { ioptr.gib });
+                    dbg!("IOAPIC id {:x}", { ioptr.id });
+                    dbg!("IOAPIC base {:x}", { ioptr.address });
+                    dbg!("IOAPIC gib {:x}", { ioptr.gib });
                     // IO APIC
                     match iomem::remap_phys({ ioptr.address } as usize, PAGE_SIZE) {
                         Ok(ptr) => {
@@ -174,7 +174,7 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
                 }
                 0x02 => {
                     let source: &EntrySourceOverride = &*(entry_addr as *const EntrySourceOverride);
-                    klog!("Source override irq {} gsi {}", { source.irq }, {
+                    dbg!("Source override irq {} gsi {}", { source.irq }, {
                         source.gsi
                     });
                 }
@@ -187,7 +187,7 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
         enable_lapic();
         enable_ioapic_interrupts();
     }
-    klog!("APIC init end");
+    dbg!("APIC init end");
 }
 
 pub mod timer {
@@ -218,7 +218,7 @@ pub mod timer {
 
         lapic_write_reg(RegLapic::InitTimer, u32::MAX);
 
-        // klog!("PIT TIMER STARTING COUNTDOWN");
+        // dbg!("PIT TIMER STARTING COUNTDOWN");
         let mut input_gate = io::inb(port::PITGATE) & 0xfe;
         io::outb(port::PITGATE, input_gate);
         input_gate |= 1;
@@ -239,6 +239,6 @@ pub mod timer {
         // Init with calculated ticks
         lapic_write_reg(RegLapic::InitTimer, ticks);
         lapic_write_reg(RegLapic::LVTTimer, 0x20000 | 0x32);
-        klog!("LAPIC INIT TIMER {} ", lapic_read_reg(RegLapic::InitTimer));
+        dbg!("LAPIC INIT TIMER {} ", lapic_read_reg(RegLapic::InitTimer));
     }
 }

@@ -106,8 +106,9 @@ pub fn kmain() -> ! {
     // TODO ugly
     let _ = fs::vfs::register_mount("/", fss[0].clone());
 
-    let _file = fs::vfs::vfs_open("/home/yrn/hello-world");
-    klog!("VFS setup");
+    dbg!("testing the vfs");
+    let _file = fs::vfs::vfs_open("/home/bob/hello-world");
+    // klog!("VFS setup");
 
     // After the first scheduler tick, the execution context will not come back to this loop
     let _ = schedule::init();
@@ -123,8 +124,8 @@ pub fn kmain() -> ! {
 fn panic(_info: &PanicInfo) -> ! {
     arch::disable_interrupts();
     // TODO could it dead lock ?
-    dbg!("Kernel panic!\n");
-    klog!("Kernel panic!\n");
+    dbg!("Kernel panic: {}\n", _info.message());
+    klog!("Kernel panic: {}\n", _info.message());
     dbg!("{}\n", _info); // TODO log macro
     klog!("{}\n", _info); // TODO log macro
     loop {}

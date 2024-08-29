@@ -1,6 +1,6 @@
 
 
-QEMU=qemu-system-i386
+QEMU=qemu-system-x86_64
 CARGO=cargo
 
 NAME=mojitos.elf
@@ -64,6 +64,9 @@ run: update_mnt $(DISKIMG)
 	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -serial stdio -no-reboot
 
 
+run_int: update_mnt $(DISKIMG)
+	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -serial stdio -no-reboot -d int,cpu_reset
+
 klib_test:
 	$(CARGO) test --no-run
 
@@ -73,7 +76,6 @@ klib_test:
 # 	$(QEMU) -cdrom $(ISO) -no-reboot
 
 debug: $(NAME)
-	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -s -S -no-reboot -d int,cpu_reset
-	# $(QEMU) -kernel $(NAME) -s -S -no-reboot -d int,cpu_reset
+	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -s -S -no-reboot -serial stdio
 
 .PHONE: all clean run debug link asm

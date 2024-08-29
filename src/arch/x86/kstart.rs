@@ -1,5 +1,6 @@
 use super::paging;
 use crate::driver::vga;
+use crate::paging::kernel_mapper;
 use crate::x86::apic;
 use crate::x86::paging::ROUND_PAGE_UP;
 use crate::{klog, dbg};
@@ -7,13 +8,14 @@ use crate::arch::common::multiboot;
 use crate::memory;
 use crate::memory::pmm;
 use crate::memory::pmm::{Frame, FrameRange};
-use crate::memory::vmm;
+use crate::memory::vmm::{self, mapper};
 use super::PAGE_SIZE;
 use super::idt;
 use super::gdt;
 use super::cpuid;
 use super::pic;
 use super::acpi;
+use super::iomem;
 
 extern "C" {
     /// Defined in linker file
@@ -27,6 +29,7 @@ extern "C" {
 #[no_mangle]
 pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
 {
+    super::disable_interrupts();
     // early vga logging
     vga::io_init();
     dbg!("VGA initialized");
@@ -67,6 +70,12 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
         dbg!("- {:?}", _entry);
     }
 
+    // TODO should it be there
+    klog!("Loading GDT");
+    gdt::load();
+    klog!("Loading IDT");
+    idt::setup();
+
     // This will filter out unusable pages
     klog!("Initializing physical memory manager");
     pmm::init(memory::phys_mem());
@@ -77,16 +86,18 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     klog!("Setup paging post jump");
     paging::init_post_jump();
 
+    loop{}
+
     klog!("Initializing kernel allocator");
     // Sets up the virtual memory manager
     let memstart = ROUND_PAGE_UP!(kend);
     vmm::init(memstart, super::KERNEL_PAGE_TABLES_START - kend);
 
-    super::disable_interrupts();
     klog!("Disabling PIC");
-    // pic::setup();
     pic::disable();
 
+
+    iomem::init();
     // TODO this sets up the APIC behind the scene, make it more transparent
     klog!("Reading ACPI information");
     acpi::init().unwrap();
@@ -94,10 +105,7 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     // klog!("Setup APIC timer");
     apic::timer::init();
 
-    klog!("Loading GDT");
-    gdt::load();
-    klog!("Loading IDT");
-    idt::setup();
+
 
     crate::kmain();
 }

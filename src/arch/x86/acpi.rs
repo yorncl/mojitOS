@@ -1,5 +1,5 @@
 use crate::x86::iomem;
-use crate::{klog, KERNEL_OFFSET};
+use crate::{dbg, KERNEL_OFFSET};
 use crate::memory::vmm;
 
 use core::ptr::addr_of;
@@ -76,74 +76,61 @@ pub fn init() -> Result<(), &'static str> {
         Err(()) => panic!("Didn't find RSDP")
     }
     // TODO handle version > 1.0
-    if rsdp_t.revision == 0 {
-        let rsdt_addr = {rsdp_t.rsdt_address} as usize;
-
-        if vmm::mapper::virt_to_phys_kernel(phys_to_virt(rsdt_addr)) != None {
-            return Err("ACPI tables are already mapped when they should not be");
-        }
-
-        unsafe {
-            // MMIO remap the zone where the RSDT is
-            let rsdt: &RSDT;
-            match iomem::remap_phys(rsdt_addr, size_of::<RSDT>()) {
-                Ok(addr) => {
-                    rsdt = &*(addr as *const RSDT);
-                }
-                Err(msg) => return Err(msg)
-            }
-            klog!("POINTER TO RSDT CHECK '{}'", core::str::from_utf8(&rsdt.h.signature).unwrap());
-
-            // {
-            //     let nentries = (rsdt.h.length - size_of::<ACPISDTHeader>() as u32) / size_of::<usize>() as u32;
-            //     let mut ptr = addr_of!(rsdt.ptr_sdt);
-            //     klog!("Pointer stored at  {:p} with value {:x}", addr_of!(ptr), ptr as usize);
-            //     for i in 0..nentries {
-            //         // TODO meddling with usize and u32 seems risky
-            //         // klog!("{}: {}", i, core::str::from_utf8(&(*ptr).signature).unwrap());
-            //         klog!("{}: pointing to {:p}", i, *ptr);
-            //         ptr = ptr.offset(1);
-            //     }
-            // }
-
-            // MMIO remap the zone where the entries pointed by the RSDT are
-            let nentries = (rsdt.h.length - size_of::<ACPISDTHeader>() as u32) / size_of::<usize>() as u32;
-            let tables_ptr;
-            match iomem::remap_phys(rsdt.ptr_sdt as usize, nentries as usize * size_of::<ACPISDTHeader>()) {
-                Ok(addr) => {
-                    tables_ptr = addr as *const usize;
-                }
-                Err(msg) => return Err(msg)
-            }
-
-            // recompute the offsets in the table
-            let base_phys: usize = rsdt.ptr_sdt as usize;
-            // tables_ptr is the virtual pointer to where the tables are actually stored
-            let base_virt = tables_ptr as usize;
-            // ptr is the pointer to the entries of the array
-            // each entry will then point to the physical location of the corresponding table
-            let mut ptr = addr_of!(rsdt.ptr_sdt);
-            for _i in 0..nentries {
-                let entry = base_virt + (*ptr as usize - base_phys);
-                let header = &*(entry as *const ACPISDTHeader);
-                match core::str::from_utf8(&header.signature).unwrap() {
-                    //MADT table
-                    "APIC" => {
-                        klog!("APIC FOUND");
-                        apic::parse_madt(header);
-                    },
-                    _ => {
-                        // TODO Unsupported tables
-                    }
-                }
-                ptr = ptr.offset(1);
-            }
-            klog!("Pointer stored at  {:p} with value {:x}", addr_of!(ptr), ptr as usize);
-        }
-
+    if rsdp_t.revision != 0 {
+        panic!("ACPI version not supported, rsdt revision = {}", rsdp_t.revision);
     }
-    else {
-        panic!("ACPI version too high, not supported!");
+
+    let rsdt_addr = {rsdp_t.rsdt_address} as usize;
+
+    if vmm::mapper::virt_to_phys_kernel(phys_to_virt(rsdt_addr)) != None {
+        return Err("ACPI tables are already mapped when they should not be");
+    }
+
+    unsafe {
+        // MMIO remap the zone where the RSDT is
+        let rsdt: &RSDT;
+        match iomem::remap_phys(rsdt_addr, size_of::<RSDT>()) {
+            Ok(addr) => {
+                rsdt = &*(addr as *const RSDT);
+            }
+            Err(msg) => return Err(msg)
+        }
+        dbg!("Rsdt {:p}", rsdt);
+
+        // MMIO remap the zone where the entries pointed by the RSDT are
+        let nentries = (rsdt.h.length - size_of::<ACPISDTHeader>() as u32) / size_of::<usize>() as u32;
+        let tables_ptr;
+        match iomem::remap_phys(rsdt.ptr_sdt as usize, nentries as usize * size_of::<ACPISDTHeader>()) {
+            Ok(addr) => {
+                tables_ptr = addr as *const usize;
+            }
+            Err(msg) => return Err(msg)
+        }
+
+
+        dbg!("Rsdt {:p}", rsdt);
+
+        // recompute the offsets in the table
+        let base_phys: usize = rsdt.ptr_sdt as usize;
+        // tables_ptr is the virtual pointer to where the tables are actually stored
+        let base_virt = tables_ptr as usize;
+        // ptr is the pointer to the entries of the array
+        // each entry will then point to the physical location of the corresponding table
+        let mut ptr = addr_of!(rsdt.ptr_sdt);
+        for _i in 0..nentries {
+            let entry = base_virt + (*ptr as usize - base_phys);
+            let header = &*(entry as *const ACPISDTHeader);
+            match core::str::from_utf8(&header.signature).unwrap() {
+                //MADT table
+                "APIC" => {
+                    apic::parse_madt(header);
+                },
+                _ => {
+                    // TODO Unsupported tables
+                }
+            }
+            ptr = ptr.offset(1);
+        }
     }
     Ok(())
 }

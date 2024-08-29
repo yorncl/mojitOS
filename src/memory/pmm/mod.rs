@@ -55,7 +55,6 @@ pub fn init(memmap: &PhysicalMemory)
             })
         }
     }
-    unsafe {klog!("{}", PMM)};
 }
 
 /// Allocate a single physical page

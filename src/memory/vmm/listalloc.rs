@@ -5,7 +5,7 @@ use crate::memory::vmm::mapper;
 use crate::x86::paging::ROUND_PAGE_UP;
 use alloc::alloc::{Layout, GlobalAlloc};
 use core::mem::size_of;
-use crate::{is_aligned, dbg_print};
+use crate::{dbg, dbg_print, is_aligned};
 use core::fmt;
 
 pub struct ListAllocator
@@ -249,15 +249,15 @@ unsafe impl GlobalAlloc for RwLock<Option<ListAllocator>>
         let mut alloc_guard = self.write().unwrap();
         let alloc = alloc_guard.as_mut().unwrap();
         let (size, _align) = ListAllocator::adjust_layout(layout);
-        // dbg!("___________ ALLOC REQUEST for {}", size);
-        // alloc.print_list();
+        dbg!("___________ ALLOC REQUEST for {}", size);
+        alloc.print_list();
         match alloc.alloc_block(size + size_of::<BlockInfo>()) { // TODO better alignment
             // management
             Ok(b) => {
-                // alloc.print_list();
+                alloc.print_list();
                 let address = b as *mut u8 as usize;
                 let ptr = (address + binfo_size!()) as *mut u8;
-                // dbg!("____________ ALLOC DONE at {:p} for {}\n", ptr, (*b).size);
+                dbg!("____________ ALLOC DONE at {:p} for {}\n", ptr, (*b).size);
                 return ptr
             }
             Err(_e) => return core::ptr::null_mut()
@@ -271,10 +271,10 @@ unsafe impl GlobalAlloc for RwLock<Option<ListAllocator>>
         // TODO Add a mechanism to check if the pointer is valid ?
         let block_address = ptr as usize - binfo_size!();
         let block: &mut BlockInfo =  &mut*(block_address as *mut BlockInfo);
-        // dbg!("___________ DEALLOC REQUEST, address {:p} block size {}", ptr, block.size);
+        dbg!("___________ DEALLOC REQUEST, address {:p} block size {}", ptr, block.size);
         alloc.free_block(block);
-        // alloc.print_list();
-        // dbg!("___________ DEALLOC DONE\n");
+        alloc.print_list();
+        dbg!("___________ DEALLOC DONE\n");
     }
 }
 

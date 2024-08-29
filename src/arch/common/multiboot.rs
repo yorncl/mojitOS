@@ -1,7 +1,7 @@
 // multiboot handling file for x86 and x86_64
 /* How many bytes from the start of the file we search for the header. */
 
-use crate::klog;
+use crate::dbg;
 
 #[allow(dead_code)]
 pub mod flags {
@@ -287,13 +287,13 @@ pub fn parse_mboot_info(ptr: *const u32) -> Result<()> {
     let info: &MultibootInfo;
     unsafe {
         info = &*(ptr as *const MultibootInfo);
-        klog!("Mboot flags euuuh: {:b}", info.flags);
-        klog!("Boot modules : {}", info.mods_count);
+        dbg!("Mboot flags : {:b}", info.flags);
+        dbg!("Boot modules : {}", info.mods_count);
 
         // memory map
         if info.flags & MULTIBOOT_INFO_MEMORY != 0 {
-            klog!("Memory lower: {} KB", info.mem_lower);
-            klog!("Memory upper: {} KB", info.mem_upper);
+            dbg!("Memory lower: {} KB", info.mem_lower);
+            dbg!("Memory upper: {} KB", info.mem_upper);
         }
 
         // elf or aout
@@ -301,12 +301,12 @@ pub fn parse_mboot_info(ptr: *const u32) -> Result<()> {
             return Err(Error::InvalidFlags);
         }
         if info.flags & MULTIBOOT_INFO_AOUT_SYMS != 0 {
-            klog!("This is an AOUT format");
+            dbg!("This is an AOUT format");
         }
         if info.flags & MULTIBOOT_INFO_ELF_SHDR != 0 {
-            klog!("This is an ELF format");
+            dbg!("This is an ELF format");
             // print elf section header info
-            klog!(
+            dbg!(
                 "Elf section header : num({}) size({}) addr({:p}) shndx({})",
                 { info.u.elf.num },
                 { info.u.elf.size },

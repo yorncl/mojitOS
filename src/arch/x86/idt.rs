@@ -1,4 +1,4 @@
-use crate::{irq, klog};
+use crate::{irq, dbg};
 use core::arch::asm;
 use core::ptr::addr_of;
 
@@ -53,7 +53,7 @@ struct IRetExceptionFrame {
 
 #[no_mangle]
 pub unsafe extern "C" fn exception_handler(code: u32, err_code: u32) {
-    klog!("EXCEPTION! Irq={}(0x{:x}) Code={:x}", code, code, err_code);
+    dbg!("EXCEPTION! Irq={}(0x{:x}) Code={:x}", code, code, err_code);
     loop{}
 }
 
@@ -98,7 +98,7 @@ pub fn setup() {
             in(reg) addr_of!(IDTR),
             options(nostack, preserves_flags)
         );
-        klog!(
+        dbg!(
             "IDT pointer : {:x}, size : {:x}",
             addr_of!(IDTR) as *const _ as u32,
             IDT.len() * core::mem::size_of::<IdtEntry>() - 1

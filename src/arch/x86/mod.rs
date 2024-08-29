@@ -24,14 +24,21 @@ pub const N_PAGES : usize = 1 << 20;
 /// Virtual memory start for kernel
 pub const KERNEL_OFFSET : usize = 0xC0000000;
 
-/// Start of the 4MB block for page tables
-/// Last 4 MB of virtual space TODO I don't know where to put it
-pub const KERNEL_PAGE_TABLES_START : usize = 0xff400000;
-/// Size of page table block
-pub const KERNEL_PAGE_TABLES_SIZE : usize = MB!(4);
+/*
 
-pub const KERNEL_IOMM_START : usize = 0xff800000;
-pub const KERNEL_IOMM_SIZE : usize = MB!(1);
+Physical memory map
+
+------------------- 0x0
+
+DMA 
+
+------------------- 0x100000
+
+Kernel Main memory
+
+...
+
+*/
 
 
 /*
@@ -52,7 +59,7 @@ Kernel Main memory
 Kernel page tables (4MB)
 
 ------------------- 0xff800000
-IO remap area (1MB)
+IO remap area (4MB)
 
 ------------------- 0xffc00000
 
@@ -61,6 +68,16 @@ The last 4MB are reserved in the Page Directory to achieve recursive mapping
 ------------------- 0xffffffff
 
 */
+
+/// Start of the 4MB block for page tables
+/// Last 4 MB of virtual space TODO I don't know where to put it
+pub const KERNEL_PAGE_TABLES_START : usize = 0xff400000;
+/// Size of page table block
+pub const KERNEL_PAGE_TABLES_SIZE : usize = MB!(4);
+
+pub const KERNEL_IOMM_START : usize = 0xff800000;
+pub const KERNEL_IOMM_SIZE : usize = MB!(1);
+
 
 // TODO move somewhere else
 use core::arch::asm;
