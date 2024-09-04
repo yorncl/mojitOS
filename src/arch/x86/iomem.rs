@@ -24,16 +24,15 @@ impl BumpMMIO {
 }
 
 static mut IOMM: BumpMMIO = BumpMMIO{ 
-    start: super::KERNEL_IOMM_START + PAGE_SIZE,
+    start: 0,
     size: 0,
 };
 
 pub fn init() -> Result<(), ()>{
     //TOOD early boot allocation to facilitate everything
     // Allocate a page for self storage
-    mapper::map_single_kernel(pmm::alloc_page().unwrap(), super::KERNEL_IOMM_START)?;
-    memset(super::KERNEL_IOMM_START as *mut c_void, 0, PAGE_SIZE);
-    Ok(())
+    // mapper::map_single_kernel(pmm::alloc_page().unwrap(), super::KERNEL_IOMM_START)?;
+    todo!();
 }
 
 // Mapping a page to a physical address

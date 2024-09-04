@@ -1,15 +1,12 @@
 use super::PAGE_SIZE;
-use crate::klib::mem::memset;
-use crate::memory::pmm;
-use crate::memory::pmm::{Frame, FrameRange};
+use crate::memory::pmm::{self, Frame, FrameRange};
 use crate::memory::vmm::mapper;
 use crate::utils::rawbox::RawBox;
-use crate::x86::KERNEL_PAGE_TABLES_START;
+use crate::MB;
 use crate::{dbg, klog, kprint};
 use bitflags::bitflags;
 use core::arch::asm;
 use core::ops::DerefMut;
-use core::ffi::c_void;
 
 pub static mut MAPPER: RawBox<PageDir> = RawBox {
     data: 0 as *mut PageDir,
@@ -53,16 +50,14 @@ macro_rules! is_page_aligned {
     };
 }
 
-extern "C" {
-    static EPD_PHYS: PageDir;
-    static EARLY_PAGE_DIRECTORY: PageDir;
-}
+#[link_section = ".data"]
+static mut KERNEL_PD: PageDir = PageDir::new();
 
 pub(crate) use ROUND_PAGE_UP;
 
 bitflags! {
     #[derive(Copy, Clone)]
-    pub struct PDEF : usize {
+    pub struct PDEF : u32 {
         const Present = 1;
         const Write = 1 << 1;
         const User = 1 << 2;
@@ -71,6 +66,7 @@ bitflags! {
         const Accessed = 1 << 5;
         const Available = 1 << 6;
         const PageSize = 1 << 7;
+        const Global = 1 << 8;
         const _ = !0;
     }
 }
@@ -107,36 +103,55 @@ bitflags! {
     }
 }
 
-type PDE = usize;
-type PTE = usize;
+// type PDE = u32;
+type PTE = u32;
+#[derive(PartialEq, Clone, Copy)]
+struct PDE(u32);
 
-#[repr(C)]
+// Je suis dans ma paranoia
+const _: [u8; 4] = [0; core::mem::size_of::<PDE>()];
+const _: [u8; 1024 * 4] = [0; core::mem::size_of::<PageDir>()];
+
+impl PDE {
+    const fn new(address: u32, flags: PDEF) -> PDE {
+        PDE(address | flags.bits())
+    }
+}
+
+#[repr(C, align(4096))]
 pub struct PageDir {
     entries: [PDE; 1024],
 }
 
 impl PageDir {
-    #[inline(always)]
-    pub fn set_entry(&mut self, i: usize, address: usize, flags: usize) {
-        self.entries[i] = (address & !0xfff) | flags; // TODO convert to flags
+    const fn new() -> Self {
+        PageDir {
+            entries: [PDE(0); 1024],
+        }
     }
 
     pub fn dump_dbg(&self) {
         dbg!("Dumping page directory");
         for i in 0..1024 {
-            if self.entries[i] != 0 {
-                dbg!(" pd entry {} -> {:x} ({:x} - {:x})", i, self.entries[i], ((i as usize) << 22), ((i + 1 as usize) << 22));
+            if self.entries[i].0 != 0 {
+                dbg!(
+                    " pd entry {} -> {:x} ({:x} - {:x})",
+                    i,
+                    self.entries[i].0,
+                    ((i as usize) << 22),
+                    ((i + 1 as usize) << 22)
+                );
                 let special = (0x3ff << 22) | i << 12;
                 dbg!("  Page table");
                 let pt: &mut PageTable = unsafe { &mut *(special as *mut PageTable) };
 
                 let mut count = -1;
-                let mut prev: usize = {pt.entries[0]};
+                let mut prev: u32 = { pt.entries[0] };
                 let mut pdelta: i64 = 0;
                 // continue;
 
                 for j in 0..1024 {
-                    let entry = {pt.entries[j]};
+                    let entry = { pt.entries[j] };
 
                     let delta = entry as i64 - prev as i64;
                     if delta == pdelta {
@@ -149,18 +164,17 @@ impl PageDir {
                         pdelta = delta;
                     }
                     if count < 3 {
-                        dbg!("   pt entry {} -> {:x} ({:x})", j, entry, ((i as usize) << 22 | (j as usize) << 12));
+                        dbg!(
+                            "   pt entry {} -> {:x} ({:x})",
+                            j,
+                            entry,
+                            ((i as usize) << 22 | (j as usize) << 12)
+                        );
                     }
                     prev = entry;
                 }
             }
         }
-    }
-}
-
-impl Default for PageDir {
-    fn default() -> Self {
-        PageDir { entries: [0; 1024] }
     }
 }
 
@@ -180,42 +194,36 @@ pub fn kernel_mapper() -> &'static mut PageDir {
     unsafe { MAPPER.deref_mut() }
 }
 
-// TODO the most abhorrent code i've written in my life so far
-fn get_kernel_pt(index: usize) -> *mut PageTable {
-    let ptr: *mut PageTable;
-    ptr = (KERNEL_PAGE_TABLES_START + index * core::mem::size_of::<PageTable>()) as *mut PageTable;
-    // TODO move out of the way
-    ptr
-}
-
 impl mapper::MapperInterface for PageDir {
     /// Map a single physical frame to a virtual address
     fn map_single(&mut self, f: Frame, address: usize) -> Result<(), ()> {
-        dbg!("Mapping page to {:x} ", address);
-        if let Some(mapped) = self.virt_to_phys(address) {
-            dbg!(
-                "Mapping already mapped address {:x}, currently mapped to {:x} ",
-                address,
-                mapped
-            );
-            panic!("Mapping already mapped page");
-        }
-        if !is_page_aligned!(address) {
-            return Err(());
-        }
-        let phys_address = f.0 * PAGE_SIZE;
-        let pde_index = pde_index!(address);
-        let pt = unsafe { &mut (*get_kernel_pt(pde_index)) };
-        if self.entries[pde_index] == 0 {
-            self.entries[pde_index] =
-                self.virt_to_phys(pt as *const PageTable as usize).unwrap() | 3;
-            memset(pt as *const PageTable as *mut c_void, 0, 4096);
-        }
-        pt.entries[pte_index!(address)] = phys_address | 3;
+        todo!();
+        // let phys_address = f.0 * PAGE_SIZE;
+        // dbg!("Mapping virt {:x} to phys {:x}", address, phys_address);
+        // if let Some(mapped) = self.virt_to_phys(address) {
+        //     dbg!(
+        //         "Mapping already mapped address {:x}, currently mapped to {:x} ",
+        //         address,
+        //         mapped
+        //     );
+        //     panic!("Mapping already mapped page");
+        // }
+        // if !is_page_aligned!(address) {
+        //     return Err(());
+        // }
+        // let pde_index = pde_index!(address);
+        // let pt = unsafe { &mut (*get_kernel_pt(pde_index)) };
+        // if self.entries[pde_index] == 0 {
+        //     self.entries[pde_index] =
+        //         self.virt_to_phys(pt as *const PageTable as usize).unwrap() | 3;
+        //     // Avoid the page table being filled with junk
+        //     memset(pt as *const PageTable as *mut c_void, 0, 4096);
+        // }
+        // pt.entries[pte_index!(address)] = phys_address | 3;
 
-        // self.dump_dbg();
-        flush_tlb();
-        Ok(())
+        // // self.dump_dbg();
+        // flush_tlb();
+        // Ok(())
     }
 
     /// Map a single page and release its physical frame
@@ -270,7 +278,7 @@ impl mapper::MapperInterface for PageDir {
         // Index in PD
         let pde_index = pde_index!(address);
         // Check if this entry is mapped, else we stop
-        if self.entries[pde_index] == 0 {
+        if self.entries[pde_index].0 == 0 {
             return None;
         }
         let pte_offset = pte_index!(address) * core::mem::size_of::<PTE>();
@@ -294,49 +302,84 @@ impl mapper::MapperInterface for PageDir {
     }
 }
 
-// TODO might put this in the assembly
-static mut KERNEL_PT_TEMP: [usize; 1024] = [0; 1024];
+/// Number of entries of 4MB to identity map in  the beginning
+const NPDE_EARLY: usize = 10;
 
-pub fn init_post_jump() {
+/// WARNING: this code will execute in protected mode, without paging enabled, before kstart
+/// This means that any reference to symbols must be offsetted by the kernel virtual load address
+/// we're effectively using real addresses
+/// This function will linearly mapp the first 75% of physical memory
+#[no_mangle]
+pub extern "C" fn setup_early_paging() {
+    // TODO check for PSE
+
+    // For some reason, this actually resolves to the physical address and I have now idea why
+    // It probably is calculated relatively, and I feel icky about it
+    let pd_ptr: &mut PageDir = unsafe { &mut *(core::ptr::addr_of_mut!(KERNEL_PD)) };
+
+    // I would expect something like that to be right
+    // let pd_ptr: &mut PageDir = unsafe {&mut *(
+    //     ( addr1 - super::KERNEL_LINEAR_START) as *mut PageDir
+    // )};
+
+    // Setting up the 1 to 1 identity mapping for the first few megabytes
+    // We need this because we will return to a lower half physical address
+    // This will get cleared up post higher half jump
+    for i in 0..NPDE_EARLY {
+        let phys_addr = (MB!(4) * i) as u32;
+        pd_ptr.entries[i] = PDE::new(phys_addr, PDEF::Present | PDEF::PageSize | PDEF::Write);
+    }
+    // Setting up the linear mapping
+    // Start of i starts at the first kernel virtual address
+    // we divied by 4mb to get the corresponding
+    let start = super::KERNEL_LINEAR_START >> 22;
+    let n = (super::KERNEL_TEMP_START >> 22) - start;
+    for i in start..start + n {
+        let phys_addr = (MB!(4) * (i - start)) as u32;
+        pd_ptr.entries[i] = PDE::new(
+            phys_addr,
+            PDEF::Present | PDEF::PageSize | PDEF::Write | PDEF::Global,
+        );
+    }
+    activate_paging();
+}
+
+/// Activate paging and PSE
+pub extern "C" fn activate_paging() {
     unsafe {
-        // We will use the static early page dir at first TODO should we change it ?
-        // TODO oh my god do a macro for getting symbols's address I
-        // shot myself in the foot multiple times already it hurts so bad
-        MAPPER = RawBox::from_ptr(&EARLY_PAGE_DIRECTORY);
-        let dir: &mut PageDir = MAPPER.deref_mut();
+        asm!(
+            concat!(
+                "
+            mov eax, cr4
+            or eax, {}
+            mov cr4, eax"
+            ),
+            in(reg) 1 << 4
+        );
+    }
+    // move KERNEL_PD to cr3 and activate paging bit
+    unsafe {
+        asm!(
+            concat!(
+                "
+            mov eax, 0x1f7000
+            mov cr3, eax
 
-        // setting the recursive mapping entry at the last entry of the table
-        // We lose 4MB of virtual space, but we gain happiness
-        // TODO this is very naky, EPD_PHYS is the load address
-        dir.set_entry(0x3ff, &EPD_PHYS as *const PageDir as usize, 3);
+            mov eax, cr0
+            or eax, 0x80000000
+            mov cr0, eax"
+            ),
+            in("eax") {(&*core::ptr::addr_of_mut!(KERNEL_PD)) as *const PageDir as usize}
+        );
+    }
+}
 
-        // remove identity mapping
-        dir.set_entry(0, 0, 0);
-
-        // Allocating 4MB in high memory to store the kernel page tables
-        // We are making sure that the virtual address is well aligned and within the last
-        // index of the directory
-        assert!(pde_index!(KERNEL_PAGE_TABLES_START) == 0x3fd);
-        assert!(is_page_aligned!(KERNEL_PAGE_TABLES_START));
-        let address = mapper::virt_to_phys_kernel(KERNEL_PT_TEMP.as_ptr() as *const usize as usize)
-            .expect("Cannot map KERNEL_PT_TMP");
-        dir.set_entry(pde_index!(KERNEL_PAGE_TABLES_START), address, 3);
-
-        // flush the tlb so we can map in the new table
-        flush_tlb();
-
-        // allocating 4MB of pages to store kernel pages TODO might be a bit overkill and
-        // unoptimized
-        let range =
-            pmm::alloc_contiguous_pages(1024).expect("Cannot allocate page tables memory space");
-
-        // Manually map the range, as mapper::map_range_kernel requires the kernel allocator to
-        // be initialized, which itself needs paging (what we are doing right now you dingus)
-        let start = range.start.0;
-        for i in 0..range.size {
-            KERNEL_PT_TEMP[i] = start + i * PAGE_SIZE | 3; // TODO better flags
+/// Remove the early identity mapping since we're in higher half now
+pub fn cleanup_post_jump() {
+    unsafe {
+        for i in 0..NPDE_EARLY {
+            KERNEL_PD.entries[i] = PDE::new(0, PDEF::empty());
         }
-        // flush the tlb one last time so that the new table is updated
         flush_tlb();
     }
 }

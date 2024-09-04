@@ -26,12 +26,15 @@ extern "C" {
 
 /// Entrypoint post boot initialization
 /// At this point the first 4MB of physical memory, containing the kernel and some DMA areas, are mapped at two places
+/// We already are in higher half
 #[no_mangle]
 pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
 {
     super::disable_interrupts();
+    dbg!("Kstart");
     // early vga logging
     vga::io_init();
+    klog!("Early boot setup...");
     dbg!("VGA initialized");
 
     // Cpu features requirements
@@ -39,7 +42,6 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     if !cpuid::check_rdmsr() {
         panic!("Kernel require rdmsr")
     }
-
     dbg!("CPU vendor: {}", cpuid::vendor());
     if !cpuid::check_local_apic() {
         panic!("APIC needed!")
@@ -71,41 +73,38 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     }
 
     // TODO should it be there
-    klog!("Loading GDT");
+    dbg!("Loading GDT");
     gdt::load();
-    klog!("Loading IDT");
+    dbg!("Loading IDT");
     idt::setup();
 
+    paging::cleanup_post_jump();
     // This will filter out unusable pages
-    klog!("Initializing physical memory manager");
+    dbg!("Initializing physical memory manager");
     pmm::init(memory::phys_mem());
     // Blocking out the first 4MB as they are already mapped and always will be
     // setting the first 4MB of PMM bitmap TODO api seems dirty
-    pmm::fill_range(FrameRange{start: Frame(0), size: (kend - super::KERNEL_OFFSET) / super::PAGE_SIZE});
-
-    klog!("Setup paging post jump");
-    paging::init_post_jump();
+    pmm::fill_range(FrameRange{start: Frame(0), size: (kend - super::KERNEL_LINEAR_START) / super::PAGE_SIZE});
 
     loop{}
-
-    klog!("Initializing kernel allocator");
+    dbg!("Initializing kernel allocator");
     // Sets up the virtual memory manager
     let memstart = ROUND_PAGE_UP!(kend);
-    vmm::init(memstart, super::KERNEL_PAGE_TABLES_START - kend);
+    // vmm::init(memstart, super::KERNEL_PAGE_TABLES_START - kend);
 
-    klog!("Disabling PIC");
+    dbg!("Disabling PIC");
     pic::disable();
 
-
-    iomem::init();
+    dbg!("Setup iomem");
+    // TODO fix ugly, remove altogether ?
+    let _ = iomem::init();
     // TODO this sets up the APIC behind the scene, make it more transparent
-    klog!("Reading ACPI information");
+    dbg!("Reading ACPI information");
     acpi::init().unwrap();
 
-    // klog!("Setup APIC timer");
+    dbg!("Setup APIC timer");
     apic::timer::init();
 
-
-
+    loop{}
     crate::kmain();
 }

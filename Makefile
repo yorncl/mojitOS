@@ -75,7 +75,7 @@ klib_test:
 # 	grub-mkrescue -o $(ISO) iso
 # 	$(QEMU) -cdrom $(ISO) -no-reboot
 
-debug: $(NAME)
+debug: $(NAME) $(DISKIMG) update_mnt
 	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -s -S -no-reboot -serial stdio
 
 .PHONE: all clean run debug link asm

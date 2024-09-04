@@ -1,5 +1,5 @@
 use crate::x86::iomem;
-use crate::{dbg, KERNEL_OFFSET};
+use crate::{dbg, KERNEL_LINEAR_START};
 use crate::memory::vmm;
 
 use core::ptr::addr_of;
@@ -47,7 +47,7 @@ pub struct ACPISDTHeader {
 // TODO is this the way ?
 #[inline(always)]
 fn phys_to_virt(base: usize) -> usize {
-    base + KERNEL_OFFSET
+    base + KERNEL_LINEAR_START
 }
 
 fn search_rsdp() -> Result<usize, ()> {

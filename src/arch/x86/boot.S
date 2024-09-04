@@ -26,9 +26,14 @@ section .text
 HIGH_MAPPING_START equ 0xC0000000
 
 kernel_bootstrap:
+  ; Setting up the stack, offset symbol to get physical address
   mov esp, (stack+STACKSIZE - HIGH_MAPPING_START) ; TODO are we clear on this ? Am I sure it doesn't break ?
+  mov ebp, esp
  
+  ; Jump to rust code to setup paging
+  pushad
   call setup_early_paging
+  popad
 
   push eax
   lea eax, [higher_half]
@@ -49,7 +54,6 @@ kernel_bootstrap:
 hang:
   hlt
   jmp hang
-
 
 
 section .bss
