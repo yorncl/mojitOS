@@ -50,7 +50,7 @@ macro_rules! is_page_aligned {
     };
 }
 
-#[link_section = ".data"]
+#[no_mangle]
 static mut KERNEL_PD: PageDir = PageDir::new();
 
 pub(crate) use ROUND_PAGE_UP;
@@ -315,7 +315,10 @@ pub extern "C" fn setup_early_paging() {
 
     // For some reason, this actually resolves to the physical address and I have now idea why
     // It probably is calculated relatively, and I feel icky about it
-    let pd_ptr: &mut PageDir = unsafe { &mut *(core::ptr::addr_of_mut!(KERNEL_PD)) };
+    let pd_ptr = unsafe {
+        &mut *((core::ptr::addr_of_mut!(KERNEL_PD) as usize - super::KERNEL_LINEAR_START)
+            as *mut PageDir)
+    };
 
     // I would expect something like that to be right
     // let pd_ptr: &mut PageDir = unsafe {&mut *(
@@ -330,7 +333,7 @@ pub extern "C" fn setup_early_paging() {
         pd_ptr.entries[i] = PDE::new(phys_addr, PDEF::Present | PDEF::PageSize | PDEF::Write);
     }
     // Setting up the linear mapping
-    // Start of i starts at the first kernel virtual address
+    // i starts at the first kernel virtual address
     // we divied by 4mb to get the corresponding
     let start = super::KERNEL_LINEAR_START >> 22;
     let n = (super::KERNEL_TEMP_START >> 22) - start;
@@ -345,31 +348,26 @@ pub extern "C" fn setup_early_paging() {
 }
 
 /// Activate paging and PSE
+#[no_mangle]
 pub extern "C" fn activate_paging() {
     unsafe {
+        // activate pse, move KERNEL_PD to cr3 and activate paging bit
         asm!(
             concat!(
                 "
             mov eax, cr4
-            or eax, {}
-            mov cr4, eax"
-            ),
-            in(reg) 1 << 4
-        );
-    }
-    // move KERNEL_PD to cr3 and activate paging bit
-    unsafe {
-        asm!(
-            concat!(
-                "
-            mov eax, 0x1f7000
+            or eax, ecx
+            mov cr4, eax
+
+            mov eax, edx
             mov cr3, eax
 
             mov eax, cr0
             or eax, 0x80000000
             mov cr0, eax"
             ),
-            in("eax") {(&*core::ptr::addr_of_mut!(KERNEL_PD)) as *const PageDir as usize}
+            in("ecx") 1 << 4,
+            in("edx") core::ptr::addr_of!(KERNEL_PD) as usize - super::KERNEL_LINEAR_START,
         );
     }
 }

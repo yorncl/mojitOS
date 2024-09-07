@@ -12,7 +12,7 @@ use crate::memory::vmm::{self, mapper};
 use super::PAGE_SIZE;
 use super::idt;
 use super::gdt;
-use super::cpuid;
+use super::cpu;
 use super::pic;
 use super::acpi;
 use super::iomem;
@@ -38,12 +38,12 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     dbg!("VGA initialized");
 
     // Cpu features requirements
-    cpuid::init();
-    if !cpuid::check_rdmsr() {
+    cpu::cpuid_fetch();
+    if !cpu::has_feature(cpu::Flags::MSR) {
         panic!("Kernel require rdmsr")
     }
-    dbg!("CPU vendor: {}", cpuid::vendor());
-    if !cpuid::check_local_apic() {
+    dbg!("CPU vendor: {}", cpu::vendor());
+    if !cpu::has_feature(cpu::Flags::APIC) {
         panic!("APIC needed!")
     }
 

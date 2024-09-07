@@ -24,19 +24,14 @@ all: $(NAME)
 
 $(NAME): $(KLIB) asm link
 
-# iso: $(NAME)
-# 	cp mojitos.elf iso/boot/mojitos.elf
-# 	grub-mkrescue -o $(ISO) iso
-
 $(DISKIMG): 
 	./build_disk.sh
 
 update_mnt: all
 	mkdir -p mnt
 	cp $(NAME) mnt/$(NAME)
-	#I got issues where the file wasn't immediately runnable by grub when copied in the vfat mounted folder
+#I got issues where the file wasn't immediately runnable by grub when copied in the vfat mounted folder
 	sync
-	
 
 $(KLIB):
 	$(CARGO) build --features debug_serial  # TODO debug ?
@@ -57,9 +52,6 @@ clean:
 	rm -f $(NAME)
 	rm -f $(ASM_OBJECTS)
 
-# run_iso: iso # TODO for some reason using the $(ISO) rule as dependency requires to run this twice for the iso to be rebuilt
-# 	$(QEMU) -cdrom $(ISO) -no-reboot
-
 run: update_mnt $(DISKIMG)
 	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -serial stdio -no-reboot
 
@@ -69,11 +61,6 @@ run_int: update_mnt $(DISKIMG)
 
 klib_test:
 	$(CARGO) test --no-run
-
-# test: klib_test asm link
-# 	cp mojitos.elf iso/boot/mojitos.elf
-# 	grub-mkrescue -o $(ISO) iso
-# 	$(QEMU) -cdrom $(ISO) -no-reboot
 
 debug: $(NAME) $(DISKIMG) update_mnt
 	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -s -S -no-reboot -serial stdio

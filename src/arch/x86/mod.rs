@@ -1,5 +1,5 @@
 pub mod context;
-pub mod cpuid;
+pub mod cpu;
 pub mod gdt;
 pub mod idt;
 pub mod io;
