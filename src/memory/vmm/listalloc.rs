@@ -1,5 +1,6 @@
 use core::borrow::BorrowMut;
-use super::{KernelAllocator, AllocError};
+use super::KernelAllocator;
+use crate::error::{Result, codes::*};
 use crate::memory::{pmm, PAGE_SIZE};
 use crate::memory::vmm::mapper;
 use crate::x86::paging::ROUND_PAGE_UP;
@@ -131,7 +132,7 @@ impl ListAllocator
 
     /// Tries to find an existing free block of sufficient enough size
     /// This function will expand the heap if it doesn't find one
-    fn alloc_block(&mut self, new_size: usize) -> Result<*const BlockInfo, AllocError>
+    fn alloc_block(&mut self, new_size: usize) -> Result<*const BlockInfo>
     {
         let mut current = self.head.borrow_mut();
         // Loop through existing free blocks to find match
@@ -178,12 +179,11 @@ impl ListAllocator
         let start = self.memstart + self.heapsize;
         let range = match pmm::alloc_contiguous_pages(total/PAGE_SIZE) {
             Some(r) => r,
-            None => { return Err(AllocError::ENOMEM) }
+            None => { return Err(ENOMEM) }
         };
-        match mapper::map_range_kernel(range, start) {
-            Ok(()) => {self.heapsize += total;}
-            Err(()) => return Err(AllocError::ENOMEM)
-        }
+        
+        mapper::map_range_kernel(range, start)?;
+        self.heapsize += total;
 
         let allocated_ptr = start as *const BlockInfo as *mut u8;
         unsafe {

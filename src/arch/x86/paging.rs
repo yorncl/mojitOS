@@ -1,5 +1,5 @@
-use super::PAGE_SIZE;
-use crate::memory::pmm::{self, Frame, FrameRange};
+use super::{KERNEL_LINEAR_START, PAGE_SIZE};
+use crate::memory::pmm::{Frame, FrameRange};
 use crate::memory::vmm::mapper;
 use crate::utils::rawbox::RawBox;
 use crate::MB;
@@ -7,6 +7,7 @@ use crate::{dbg, klog, kprint};
 use bitflags::bitflags;
 use core::arch::asm;
 use core::ops::DerefMut;
+use crate::error::{Result, codes::*};
 
 pub static mut MAPPER: RawBox<PageDir> = RawBox {
     data: 0 as *mut PageDir,
@@ -196,7 +197,7 @@ pub fn kernel_mapper() -> &'static mut PageDir {
 
 impl mapper::MapperInterface for PageDir {
     /// Map a single physical frame to a virtual address
-    fn map_single(&mut self, f: Frame, address: usize) -> Result<(), ()> {
+    fn map_single(&mut self, f: Frame, address: usize) -> Result<()> {
         todo!();
         // let phys_address = f.0 * PAGE_SIZE;
         // dbg!("Mapping virt {:x} to phys {:x}", address, phys_address);
@@ -227,13 +228,13 @@ impl mapper::MapperInterface for PageDir {
     }
 
     /// Map a single page and release its physical frame
-    fn unmap_single(&mut self, address: usize) -> Result<(), ()> {
+    fn unmap_single(&mut self, address: usize) -> Result<()> {
         if !is_page_aligned!(address) {
-            return Err(());
+            return Err(EFAULT);
         }
         dbg!("Unmapping a single frame");
         // Making sure that the page is mapped
-        let address = self.virt_to_phys(address).ok_or(())?;
+        let address = self.virt_to_phys(address).ok_or(EFAULT)?;
 
         // free the entry in the page directory
         // Use recursive mapping to get to the corresponding page table
@@ -244,13 +245,12 @@ impl mapper::MapperInterface for PageDir {
         todo!();
 
         // Release the physical frame
-        pmm::free_page(Frame(address / PAGE_SIZE));
         flush_tlb();
         Ok(())
     }
 
     /// Unmap multiple pages and release their physical frames
-    fn unmap_range(&mut self, address: usize, npages: usize) -> Result<(), ()> {
+    fn unmap_range(&mut self, address: usize, npages: usize) -> Result<()> {
         let mut ptr = address;
         for _ in 0..npages {
             self.unmap_single(ptr).unwrap();
@@ -260,9 +260,9 @@ impl mapper::MapperInterface for PageDir {
     }
 
     /// Map a range of physical frame
-    fn map_range(&mut self, r: FrameRange, address: usize) -> Result<(), ()> {
+    fn map_range(&mut self, r: FrameRange, address: usize) -> Result<()> {
         if !is_page_aligned!(address) {
-            return Err(());
+            return Err(EFAULT);
         }
         // TODO assert aligned to page
         // TODO more generic api
@@ -299,6 +299,13 @@ impl mapper::MapperInterface for PageDir {
             return None;
         }
         Some(pte + offset)
+    }
+
+    fn phys_to_virt(&self, address: usize) -> Option<usize> {
+        if address > (super::KERNEL_TEMP_START - super::KERNEL_LINEAR_START) {
+            return None
+        }
+        Some(KERNEL_LINEAR_START + address)
     }
 }
 

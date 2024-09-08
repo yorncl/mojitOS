@@ -4,10 +4,6 @@ pub mod mapper;
 
 use crate::klib::lock::RwLock;
 use listalloc::ListAllocator;
-
-enum AllocError {
-    ENOMEM,
-}
  
 #[global_allocator]
 static mut ALLOCATOR : RwLock<Option<ListAllocator>> = RwLock::new(None); 

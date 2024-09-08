@@ -299,11 +299,8 @@ impl Ext2 {
         )?;
         let inode = unsafe { *(buffer.as_ptr() as *const Inode).offset(inode_table_i as isize) };
 
-        // dbg!("========= Start entries");
-        // for _dir in db.into_iter() {
-        //     dbg!("{:?}", _dir);
-        // }
-        // dbg!("Reached the end do'");
+        dbg!("========= Start entries");
+        todo!();
         Ok(inode)
     }
 

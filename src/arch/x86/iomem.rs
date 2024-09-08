@@ -1,9 +1,7 @@
-use crate::klib::mem::memset;
 use crate::memory::{pmm, PAGE_SIZE};
 use crate::memory::vmm::mapper;
 use crate::MB;
 use crate::{ROUND_PAGE_UP, ROUND_PAGE_DOWN};
-use core::ffi::c_void;
 
 // TODO extremely primitive memory management
 

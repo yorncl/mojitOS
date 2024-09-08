@@ -1,6 +1,5 @@
 use super::paging;
 use crate::driver::vga;
-use crate::paging::kernel_mapper;
 use crate::x86::apic;
 use crate::x86::paging::ROUND_PAGE_UP;
 use crate::{klog, dbg};
@@ -8,7 +7,7 @@ use crate::arch::common::multiboot;
 use crate::memory;
 use crate::memory::pmm;
 use crate::memory::pmm::{Frame, FrameRange};
-use crate::memory::vmm::{self, mapper};
+use crate::memory::vmm;
 use super::PAGE_SIZE;
 use super::idt;
 use super::gdt;
@@ -31,11 +30,9 @@ extern "C" {
 pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
 {
     super::disable_interrupts();
-    dbg!("Kstart");
     // early vga logging
     vga::io_init();
     klog!("Early boot setup...");
-    dbg!("VGA initialized");
 
     // Cpu features requirements
     cpu::cpuid_fetch();
@@ -90,7 +87,7 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     dbg!("Initializing kernel allocator");
     // Sets up the virtual memory manager
     let memstart = ROUND_PAGE_UP!(kend);
-    // vmm::init(memstart, super::KERNEL_PAGE_TABLES_START - kend);
+    vmm::init(memstart, todo!());
 
     dbg!("Disabling PIC");
     pic::disable();

@@ -1,5 +1,5 @@
 use crate::x86::iomem;
-use crate::{dbg, KERNEL_LINEAR_START};
+use crate::dbg;
 use crate::memory::vmm;
 
 use core::ptr::addr_of;
@@ -43,20 +43,13 @@ pub struct ACPISDTHeader {
     pub creator_revision: u32,
 }
 
-
-// TODO is this the way ?
-#[inline(always)]
-fn phys_to_virt(base: usize) -> usize {
-    base + KERNEL_LINEAR_START
-}
-
 fn search_rsdp() -> Result<usize, ()> {
     // search for signature from 0x000E0000 to 0x000FFFFF
     // we're not in real mode
     unsafe {
         // TODO beurk l'offset encore une fois
-        let mut ptr: usize = phys_to_virt(0xE0000);
-        while ptr < phys_to_virt(0x000FFFFF) {
+        let mut ptr: usize = vmm::mapper::phys_to_virt(0xE0000).ok_or(())?;
+        while ptr < vmm::mapper::phys_to_virt(0x000FFFFF).ok_or(())? {
             if *(ptr as *const u64) == RSDP_SIGNATURE {
                 return Ok(ptr as usize)
             }
@@ -82,7 +75,7 @@ pub fn init() -> Result<(), &'static str> {
 
     let rsdt_addr = {rsdp_t.rsdt_address} as usize;
 
-    if vmm::mapper::virt_to_phys_kernel(phys_to_virt(rsdt_addr)) != None {
+    if vmm::mapper::virt_to_phys_kernel(vmm::mapper::phys_to_virt(rsdt_addr).unwrap()) != None {
         return Err("ACPI tables are already mapped when they should not be");
     }
 
