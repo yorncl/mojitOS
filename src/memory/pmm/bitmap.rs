@@ -1,7 +1,8 @@
 use crate::arch;
-use crate::memory::pmm::{PageManager, Frame, FrameRange};
+use crate::error::codes::ENOMEM;
+use crate::memory::pmm::{Zone, PageManager, Frame, FrameRange};
 use core::fmt;
-
+use crate::error::Result;
 
 /// WARNING : this is extremely slow and not intended to be the final PMM
 /// Ultimately will be replaced by a buddy system
@@ -53,20 +54,27 @@ macro_rules! unset {
     };
 }
 
+#[allow(unreachable_code, unused_variables)]
 impl PageManager for BitMap {
 
-    fn alloc_page(&mut self) -> Option<Frame> { // TODO limit and out of memory error
+    fn setup(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn alloc_page(&mut self, zone: Zone) -> Result<Frame> { // TODO limit and out of memory error
+        unimplemented!();
         for i in 0..self.size {
             if notset!(self, i){
                 // TODO could I speed up this module with & ?
                 set!(self, i);
-                return Some(Frame(i));
+                return Ok(Frame(i));
             }
         }
-        None
+        Err(ENOMEM)
     }
 
-    fn alloc_contiguous_pages(&mut self, n: usize) -> Option<FrameRange> {
+    fn alloc_contiguous_pages(&mut self, n: usize, zone: Zone) -> Result<FrameRange> {
+        unimplemented!();
         let mut j = 0;
         for i in 0..self.size {
             if notset!(self, i) {
@@ -75,7 +83,7 @@ impl PageManager for BitMap {
                     for a in i-j..i {
                         set!(self, a);
                     }
-                    return Some(FrameRange{start: Frame(i-j), size: n});
+                    return Ok(FrameRange{start: Frame(i-j), size: n});
                 }
             }
             else if j > 0
@@ -83,7 +91,7 @@ impl PageManager for BitMap {
                 j = 0;
             }
         }
-        None
+        Err(ENOMEM)
     }
 
     fn free_page(&mut self, f: Frame) {

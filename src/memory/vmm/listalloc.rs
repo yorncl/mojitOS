@@ -177,10 +177,7 @@ impl ListAllocator
         // we need to align in case the leftover allocation needs another block
         let total = ROUND_PAGE_UP!(new_size + core::mem::align_of::<BlockInfo>());
         let start = self.memstart + self.heapsize;
-        let range = match pmm::alloc_contiguous_pages(total/PAGE_SIZE) {
-            Some(r) => r,
-            None => { return Err(ENOMEM) }
-        };
+        let range = pmm::alloc_contiguous_pages(total/PAGE_SIZE, pmm::Zone::Normal)?;
         
         mapper::map_range_kernel(range, start)?;
         self.heapsize += total;

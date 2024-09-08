@@ -1,97 +1,98 @@
 mod bitmap;
 
+use crate::error::Result;
+use crate::klib::lock::RwLock;
+use crate::memory::{PhysicalMemory, RegionType, PAGE_SIZE};
 use bitmap::BitMap;
 use core::fmt;
-use crate::memory::{PhysicalMemory, RegionType, PAGE_SIZE};
-use crate::klog;
 
 /// Abstract representation of Frame
 /// It does not represent an address because the PMM shouldn't be aware of the current
 /// architecture, beyond that it is a page based system
 pub struct Frame(pub usize);
 
-impl fmt::Display for Frame
-{
+impl fmt::Display for Frame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {})", self.0, self.0)
     }
 }
 
-pub struct FrameRange
-{
+pub struct FrameRange {
     pub start: Frame,
-    pub size: usize
+    pub size: usize,
 }
 
 /// The PMM instance
-static mut PMM: BitMap = BitMap::default_const();
+static mut PMM: RwLock<BitMap> = RwLock::new(BitMap::default_const());
 
-// TODO proper non contiguous area management
+/// Zone of the allocation
+pub enum Zone {
+    Normal,
+    Dma,
+}
 
 /// Physical Memory Manager trait
 /// Every physical memory manager should implement this trait
-/// We expose a safe api below directly under the crate::pmm namespace
-/// That way we don't have to make the PMM instance public, it is cleaner
-
-#[allow(dead_code)]
 pub trait PageManager {
-    fn alloc_page(&mut self) -> Option<Frame>;
-    fn alloc_contiguous_pages(&mut self, n: usize) -> Option<FrameRange>;
+    fn setup(&mut self) -> Result<()>;
+    fn alloc_page(&mut self, z: Zone) -> Result<Frame>;
+    fn alloc_contiguous_pages(&mut self, n: usize, z: Zone) -> Result<FrameRange>;
     fn free_page(&mut self, f: Frame);
     fn free_contiguous_pages(&mut self, r: FrameRange);
     fn fill_range(&mut self, r: FrameRange) -> ();
     fn get_phys_frames(&self, phys_addres: usize, n: usize) -> FrameRange;
 }
 
-/// Initialize
-#[inline(always)]
-pub fn init(memmap: &PhysicalMemory)
-{   
+/// Initialize the physical memory manager
+pub fn init(memmap: &PhysicalMemory) {
     for entry in memmap.regions {
         if entry.rtype == RegionType::Available {
             free_contiguous_pages(FrameRange {
                 start: Frame(entry.start / PAGE_SIZE),
-                size: entry.size / PAGE_SIZE
+                size: entry.size / PAGE_SIZE,
             })
         }
     }
 }
 
-/// Allocate a single physical page
 #[inline(always)]
-// TODO remove dead code later
-#[allow(dead_code)]
-pub fn alloc_page() -> Option<Frame>
-{   
-    unsafe {PMM.alloc_page()}
-}
-
-/// Allocate n contiguous pages
-#[inline(always)]
-pub fn alloc_contiguous_pages(n: usize) -> Option<FrameRange>
-{
-    unsafe {PMM.alloc_contiguous_pages(n)}
+/// Allocate a single physical page in a physical zone
+pub fn alloc_page(zone: Zone) -> Result<Frame> {
+    let mut pmm = unsafe { PMM.write().unwrap() };
+    pmm.alloc_page(zone)
 }
 
 #[inline(always)]
-pub fn free_page(f: Frame)
-{
-    unsafe {PMM.free_page(f)}
+/// Allocate n contiguous pages in a physical zone
+pub fn alloc_contiguous_pages(n: usize, zone: Zone) -> Result<FrameRange> {
+    let mut pmm = unsafe { PMM.write().unwrap() };
+    pmm.alloc_contiguous_pages(n, zone)
 }
 
 #[inline(always)]
-pub fn free_contiguous_pages(f: FrameRange)
-{
-    unsafe {PMM.free_contiguous_pages(f)}
+/// Free a single page
+pub fn free_page(f: Frame) {
+    let mut pmm = unsafe { PMM.write().unwrap() };
+    pmm.free_page(f);
 }
 
 #[inline(always)]
-pub fn fill_range(f: FrameRange) -> ()
-{
-    unsafe {PMM.fill_range(f)}
+/// Free a range of contiguous pages
+pub fn free_contiguous_pages(f: FrameRange) {
+    let mut pmm = unsafe { PMM.write().unwrap() };
+    pmm.free_contiguous_pages(f)
+}
+
+#[inline(always)]
+/// Marks the page ranges as allocated
+/// among other things, used to block out reserved page ranges
+pub fn fill_range(f: FrameRange) -> () {
+    let mut pmm = unsafe { PMM.write().unwrap() };
+    pmm.fill_range(f)
 }
 
 #[inline(always)]
 pub fn get_phys_frames(phys_addres: usize, n: usize) -> FrameRange {
-    unsafe {PMM.get_phys_frames(phys_addres, n)}
+    let mut pmm = unsafe { PMM.write().unwrap() };
+    pmm.get_phys_frames(phys_addres, n)
 }
