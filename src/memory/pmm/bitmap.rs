@@ -3,6 +3,7 @@ use crate::error::codes::ENOMEM;
 use crate::memory::pmm::{Zone, PageManager, Frame, FrameRange};
 use core::fmt;
 use crate::error::Result;
+use crate::dbg;
 
 /// WARNING : this is extremely slow and not intended to be the final PMM
 /// Ultimately will be replaced by a buddy system
@@ -21,9 +22,10 @@ pub struct BitMap {
 impl BitMap {
     pub const fn default_const() -> Self {
         BitMap {
-            data: [0xff; BITMAP_SIZE/8],
+            // Everything free at first
+            data: [0; BITMAP_SIZE/8],
             size: BITMAP_SIZE,
-            free_pages: 0
+            free_pages: BITMAP_SIZE
         }
     }
 }
@@ -44,6 +46,7 @@ macro_rules! notset {
 macro_rules! set {
     ($self:ident, $i:expr) => {
         $self.data[$i / 8] |= 1 << ($i % 8);
+        $self.free_pages -= 1;
     };
 }
 
@@ -58,11 +61,11 @@ macro_rules! unset {
 impl PageManager for BitMap {
 
     fn setup(&mut self) -> Result<()> {
+        dbg!("PMM BitMap: memory_size({}KB), free_pages({}))", core::mem::size_of::<BitMap>()/1024, self.free_pages);
         Ok(())
     }
 
     fn alloc_page(&mut self, zone: Zone) -> Result<Frame> { // TODO limit and out of memory error
-        unimplemented!();
         for i in 0..self.size {
             if notset!(self, i){
                 // TODO could I speed up this module with & ?
@@ -74,7 +77,6 @@ impl PageManager for BitMap {
     }
 
     fn alloc_contiguous_pages(&mut self, n: usize, zone: Zone) -> Result<FrameRange> {
-        unimplemented!();
         let mut j = 0;
         for i in 0..self.size {
             if notset!(self, i) {

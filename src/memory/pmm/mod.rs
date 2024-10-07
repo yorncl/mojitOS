@@ -5,6 +5,7 @@ use crate::klib::lock::RwLock;
 use crate::memory::{PhysicalMemory, RegionType, PAGE_SIZE};
 use bitmap::BitMap;
 use core::fmt;
+use crate::dbg;
 
 /// Abstract representation of Frame
 /// It does not represent an address because the PMM shouldn't be aware of the current
@@ -23,7 +24,7 @@ pub struct FrameRange {
 }
 
 /// The PMM instance
-static mut PMM: RwLock<BitMap> = RwLock::new(BitMap::default_const());
+static PMM: RwLock<BitMap> = RwLock::new(BitMap::default_const());
 
 /// Zone of the allocation
 pub enum Zone {
@@ -45,6 +46,9 @@ pub trait PageManager {
 
 /// Initialize the physical memory manager
 pub fn init(memmap: &PhysicalMemory) {
+    let mut pmm = PMM.write().unwrap();
+    pmm.setup();
+    drop(pmm);
     for entry in memmap.regions {
         if entry.rtype == RegionType::Available {
             free_contiguous_pages(FrameRange {
@@ -58,28 +62,28 @@ pub fn init(memmap: &PhysicalMemory) {
 #[inline(always)]
 /// Allocate a single physical page in a physical zone
 pub fn alloc_page(zone: Zone) -> Result<Frame> {
-    let mut pmm = unsafe { PMM.write().unwrap() };
+    let mut pmm = PMM.write().unwrap();
     pmm.alloc_page(zone)
 }
 
 #[inline(always)]
 /// Allocate n contiguous pages in a physical zone
 pub fn alloc_contiguous_pages(n: usize, zone: Zone) -> Result<FrameRange> {
-    let mut pmm = unsafe { PMM.write().unwrap() };
+    let mut pmm = PMM.write().unwrap();
     pmm.alloc_contiguous_pages(n, zone)
 }
 
 #[inline(always)]
 /// Free a single page
 pub fn free_page(f: Frame) {
-    let mut pmm = unsafe { PMM.write().unwrap() };
+    let mut pmm = PMM.write().unwrap();
     pmm.free_page(f);
 }
 
 #[inline(always)]
 /// Free a range of contiguous pages
 pub fn free_contiguous_pages(f: FrameRange) {
-    let mut pmm = unsafe { PMM.write().unwrap() };
+    let mut pmm = PMM.write().unwrap();
     pmm.free_contiguous_pages(f)
 }
 
@@ -87,12 +91,13 @@ pub fn free_contiguous_pages(f: FrameRange) {
 /// Marks the page ranges as allocated
 /// among other things, used to block out reserved page ranges
 pub fn fill_range(f: FrameRange) -> () {
-    let mut pmm = unsafe { PMM.write().unwrap() };
+    dbg!("Filling range : {}", f.size);
+    let mut pmm = PMM.write().unwrap();
     pmm.fill_range(f)
 }
 
 #[inline(always)]
 pub fn get_phys_frames(phys_addres: usize, n: usize) -> FrameRange {
-    let mut pmm = unsafe { PMM.write().unwrap() };
+    let mut pmm = PMM.write().unwrap();
     pmm.get_phys_frames(phys_addres, n)
 }

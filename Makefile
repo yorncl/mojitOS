@@ -1,6 +1,6 @@
 
 
-QEMU=qemu-system-x86_64
+QEMU=qemu-system-i386
 CARGO=cargo
 
 NAME=mojitos.elf

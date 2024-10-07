@@ -1,6 +1,5 @@
 
 global loader
-global stack_ptr
 global kernel_bootstrap
 
 extern kstart
@@ -60,4 +59,3 @@ section .bss
 align 4
 stack:
   resb STACKSIZE
-stack_ptr:

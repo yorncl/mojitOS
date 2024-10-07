@@ -4,14 +4,14 @@ use crate::memory::vmm::mapper;
 use crate::utils::rawbox::RawBox;
 use crate::MB;
 use crate::{dbg, klog, kprint};
-use bitflags::bitflags;
+use bitflags::{bitflags, Flags};
 use core::arch::asm;
 use core::ops::DerefMut;
 use crate::error::{Result, codes::*};
 
-pub static mut MAPPER: RawBox<PageDir> = RawBox {
-    data: 0 as *mut PageDir,
-};
+// pub static mut MAPPER: RawBox<PageDir> = RawBox {
+//     data: 0 as *mut PageDir,
+// };
 
 #[macro_export]
 macro_rules! ROUND_PAGE_UP {
@@ -192,7 +192,8 @@ struct PageTable {
 
 #[inline(always)]
 pub fn kernel_mapper() -> &'static mut PageDir {
-    unsafe { MAPPER.deref_mut() }
+    // TODO clean up
+    unsafe { &mut KERNEL_PD }
 }
 
 impl mapper::MapperInterface for PageDir {
@@ -275,30 +276,34 @@ impl mapper::MapperInterface for PageDir {
 
     /// Will use the last entry of the page directory for recursive mapping
     fn virt_to_phys(&self, address: usize) -> Option<usize> {
+        dbg!("Virt_to_phys input {:x}", address);
         // Index in PD
         let pde_index = pde_index!(address);
-        // Check if this entry is mapped, else we stop
-        if self.entries[pde_index].0 == 0 {
-            return None;
-        }
-        let pte_offset = pte_index!(address) * core::mem::size_of::<PTE>();
+        let pte_offset = pte_index!(address);
         let offset = offset!(address);
-
-        // Here we exploit our recursive mapping
-        // 0x3ff - the last entry of the PD
-        // pde_index << 12 - will act as the PT index
-        // pte_offsett - will be the offset to the entry that matter in the accessed Page Table
-        let special = (0x3ff << 22) | pde_index << 12 | pte_offset;
-        let pte: usize;
-        unsafe {
-            // We access that location which corresponds to the PT entry , and discard the lowest 12 flag bits
-            pte = *(special as *const usize) & !0xfff;
-        }
-        // if the entry is to 0, then it is not mapped
-        if pte == 0 {
+        // Check if this entry is mapped, else we stop
+        
+        let pde = self.entries[pde_index];
+        if pde.0 == 0 {
             return None;
         }
-        Some(pte + offset)
+
+        dbg!("PDE = {:x}", pde.0);
+
+        // TODO refactor
+        if pde.0 & PDEF::PageSize.bits() != 0 {
+            // NO PSE
+            dbg!("PART 1< = {:x}", (pde.0 as usize & !((1 << 22) - 1)));
+            let addr = (pde.0 as usize & !((1 << 22) - 1)) + (address & ((1 << 22) - 1));
+            dbg!("Virt_to_phys 4MB page output {:x}", addr);
+            return Some(addr);
+        }
+
+
+        let pt = unsafe { &*((self.entries[pde_index].0 as usize + super::KERNEL_LINEAR_START) as *const PageTable)};
+        let addr = pt.entries[pte_offset] as usize + offset;
+        dbg!("Virt_to_phys output {:x}", addr);
+        Some(addr)
     }
 
     fn phys_to_virt(&self, address: usize) -> Option<usize> {

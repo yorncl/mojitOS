@@ -30,6 +30,7 @@ extern "C" {
 pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
 {
     super::disable_interrupts();
+
     // early vga logging
     vga::io_init();
     klog!("Early boot setup...");
@@ -81,13 +82,13 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     pmm::init(memory::phys_mem());
     // Blocking out the first 4MB as they are already mapped and always will be
     // setting the first 4MB of PMM bitmap TODO api seems dirty
-    pmm::fill_range(FrameRange{start: Frame(0), size: (kend - super::KERNEL_LINEAR_START) / super::PAGE_SIZE});
+    pmm::fill_range(FrameRange{start: Frame(0), size: ROUND_PAGE_UP!(kend) / super::PAGE_SIZE});
 
-    loop{}
     dbg!("Initializing kernel allocator");
     // Sets up the virtual memory manager
     let memstart = ROUND_PAGE_UP!(kend);
-    vmm::init(memstart, todo!());
+    // TODO temp size
+    vmm::init(memstart, crate::MB!(40));
 
     dbg!("Disabling PIC");
     pic::disable();

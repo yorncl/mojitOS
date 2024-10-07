@@ -1,6 +1,6 @@
 use crate::x86::iomem;
 use crate::dbg;
-use crate::memory::vmm;
+use crate::memory::vmm::{self, mapper};
 
 use core::ptr::addr_of;
 use core::mem::size_of;
@@ -44,10 +44,8 @@ pub struct ACPISDTHeader {
 }
 
 fn search_rsdp() -> Result<usize, ()> {
-    // search for signature from 0x000E0000 to 0x000FFFFF
-    // we're not in real mode
+    // search for signature from 0x000E0000 to 0x000FFFFF (mapped in kernel space)
     unsafe {
-        // TODO beurk l'offset encore une fois
         let mut ptr: usize = vmm::mapper::phys_to_virt(0xE0000).ok_or(())?;
         while ptr < vmm::mapper::phys_to_virt(0x000FFFFF).ok_or(())? {
             if *(ptr as *const u64) == RSDP_SIGNATURE {
@@ -64,7 +62,10 @@ pub fn init() -> Result<(), &'static str> {
     let rsdp_t: &XSDPT;
     // let rsdp: &ACPISDTHeader;
     match search_rsdp() {
-        Ok(address) => {unsafe {rsdp_t = &*(address as *const XSDPT);}}, 
+        Ok(address) => {
+            unsafe {rsdp_t = &*(address as *const XSDPT);}
+            dbg!("Found RSDP, SIGNATURE {}", core::str::from_utf8(&rsdp_t.signature).unwrap());
+        }, 
         // TODO check the checksum
         Err(()) => panic!("Didn't find RSDP")
     }
@@ -75,22 +76,23 @@ pub fn init() -> Result<(), &'static str> {
 
     let rsdt_addr = {rsdp_t.rsdt_address} as usize;
 
-    if vmm::mapper::virt_to_phys_kernel(vmm::mapper::phys_to_virt(rsdt_addr).unwrap()) != None {
-        return Err("ACPI tables are already mapped when they should not be");
+    // TODO used to make sense before the linear mapping
+    if vmm::mapper::virt_to_phys_kernel(vmm::mapper::phys_to_virt(rsdt_addr).unwrap()) == None {
+        return Err("ACPI tables aren't mapped");
     }
 
     unsafe {
         // MMIO remap the zone where the RSDT is
         let rsdt: &RSDT;
+
         match iomem::remap_phys(rsdt_addr, size_of::<RSDT>()) {
-            Ok(addr) => {
-                rsdt = &*(addr as *const RSDT);
-            }
+            Ok(addr) => { rsdt = &*(addr as *const RSDT); }
             Err(msg) => return Err(msg)
         }
         dbg!("Rsdt {:p}", rsdt);
 
         // MMIO remap the zone where the entries pointed by the RSDT are
+        dbg!("Rsdt len {} vs {}", {rsdt.h.length}, size_of::<ACPISDTHeader>());
         let nentries = (rsdt.h.length - size_of::<ACPISDTHeader>() as u32) / size_of::<usize>() as u32;
         let tables_ptr;
         match iomem::remap_phys(rsdt.ptr_sdt as usize, nentries as usize * size_of::<ACPISDTHeader>()) {
