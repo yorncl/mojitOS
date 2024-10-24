@@ -24,7 +24,7 @@ all: $(NAME)
 
 $(NAME): $(KLIB) asm link
 
-$(DISKIMG): 
+$(DISK_IMG): 
 	./build_disk.sh
 
 update_mnt: all
@@ -52,17 +52,17 @@ clean:
 	rm -f $(NAME)
 	rm -f $(ASM_OBJECTS)
 
-run: update_mnt $(DISKIMG)
-	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -serial stdio -no-reboot
+run: update_mnt $(DISK_IMG)
+	$(QEMU) --enable-kvm -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -serial stdio -no-reboot
 
 
 run_int: update_mnt $(DISKIMG)
-	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -serial stdio -no-reboot -d int,cpu_reset
+	$(QEMU) --enable-kvm -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -serial stdio -no-reboot -d int,cpu_reset
 
 klib_test:
 	$(CARGO) test --no-run
 
 debug: $(NAME) $(DISKIMG) update_mnt
-	$(QEMU) -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -s -S -no-reboot -serial stdio
+	$(QEMU) --enable-kvm -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -s -S -no-reboot -serial stdio
 
 .PHONE: all clean run debug link asm
