@@ -29,7 +29,8 @@ $(DISK_IMG):
 
 update_mnt: all
 	mkdir -p mnt
-	cp $(NAME) mnt/$(NAME)
+	# TODO fix user rights
+	sudo cp $(NAME) mnt/$(NAME)
 #I got issues where the file wasn't immediately runnable by grub when copied in the vfat mounted folder
 	sync
 
