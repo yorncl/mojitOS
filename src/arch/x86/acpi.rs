@@ -1,11 +1,10 @@
-use crate::x86::iomem;
 use crate::dbg;
 use crate::memory::vmm::{self, mapper};
+use crate::x86::iomem;
 
-use core::ptr::addr_of;
-use core::mem::size_of;
 use super::apic;
-
+use core::mem::size_of;
+use core::ptr::addr_of;
 
 static RSDP_SIGNATURE: u64 = u64::from_le_bytes(*b"RSD PTR ");
 
@@ -26,9 +25,8 @@ struct XSDPT {
 #[repr(C, packed)]
 struct RSDT {
     h: ACPISDTHeader,
-    ptr_sdt: *const usize
+    ptr_sdt: *const usize,
 }
-
 
 #[repr(C, packed)]
 pub struct ACPISDTHeader {
@@ -49,7 +47,7 @@ fn search_rsdp() -> Result<usize, ()> {
         let mut ptr: usize = vmm::mapper::phys_to_virt(0xE0000).ok_or(())?;
         while ptr < vmm::mapper::phys_to_virt(0x000FFFFF).ok_or(())? {
             if *(ptr as *const u64) == RSDP_SIGNATURE {
-                return Ok(ptr as usize)
+                return Ok(ptr as usize);
             }
             ptr += 0x10;
         }
@@ -57,51 +55,64 @@ fn search_rsdp() -> Result<usize, ()> {
     Err(())
 }
 
+// TODO str signature feels ugly
 pub fn init() -> Result<(), &'static str> {
-
-    let rsdp_t: &XSDPT;
-    // let rsdp: &ACPISDTHeader;
+    let rsdp: &XSDPT;
     match search_rsdp() {
         Ok(address) => {
-            unsafe {rsdp_t = &*(address as *const XSDPT);}
-            dbg!("Found RSDP, SIGNATURE {}", core::str::from_utf8(&rsdp_t.signature).unwrap());
-        }, 
+            unsafe {
+                rsdp = &*(address as *const XSDPT);
+            }
+            dbg!(
+                "Found RSDP, SIGNATURE {}",
+                core::str::from_utf8(&rsdp.signature).unwrap()
+            );
+        }
         // TODO check the checksum
-        Err(()) => panic!("Didn't find RSDP")
+        Err(()) => panic!("Didn't find RSDP"),
     }
+
+    // TODO checksum?
+    let mut ptr = rsdp as *const XSDPT as *const u8;
+
     // TODO handle version > 1.0
-    if rsdp_t.revision != 0 {
-        panic!("ACPI version not supported, rsdt revision = {}", rsdp_t.revision);
+    if rsdp.revision != 0 {
+        panic!(
+            "ACPI version not supported, rsdt revision = {}",
+            rsdp.revision
+        );
     }
 
-    let rsdt_addr = {rsdp_t.rsdt_address} as usize;
+    // Physical address
+    let rsdt_addr = { rsdp.rsdt_address } as usize;
+    dbg!("rsdt address {:x}", rsdt_addr);
 
-    // TODO used to make sense before the linear mapping
-    if vmm::mapper::virt_to_phys_kernel(vmm::mapper::phys_to_virt(rsdt_addr).unwrap()) == None {
-        return Err("ACPI tables aren't mapped");
-    }
-
+    // // TODO used to make sense before the linear mapping
+    // if vmm::mapper::virt_to_phys_kernel(vmm::mapper::phys_to_virt(rsdt_addr).unwrap()) == None {
+    //     return Err("ACPI tables aren't mapped");
+    // }
     unsafe {
         // MMIO remap the zone where the RSDT is
-        let rsdt: &RSDT;
+        let rsdt: &RSDT = &*(iomem::remap_phys(rsdt_addr, size_of::<RSDT>())? as *const RSDT);
+        // let rsdt: &RSDT = &*(rsdt_addr as *const RSDT);
 
-        match iomem::remap_phys(rsdt_addr, size_of::<RSDT>()) {
-            Ok(addr) => { rsdt = &*(addr as *const RSDT); }
-            Err(msg) => return Err(msg)
-        }
         dbg!("Rsdt {:p}", rsdt);
 
         // MMIO remap the zone where the entries pointed by the RSDT are
-        dbg!("Rsdt len {} vs {}", {rsdt.h.length}, size_of::<ACPISDTHeader>());
-        let nentries = (rsdt.h.length - size_of::<ACPISDTHeader>() as u32) / size_of::<usize>() as u32;
-        let tables_ptr;
-        match iomem::remap_phys(rsdt.ptr_sdt as usize, nentries as usize * size_of::<ACPISDTHeader>()) {
-            Ok(addr) => {
-                tables_ptr = addr as *const usize;
-            }
-            Err(msg) => return Err(msg)
-        }
+        dbg!(
+            "Rsdt len {} vs {}",
+            { rsdt.h.length },
+            size_of::<ACPISDTHeader>()
+        );
+        dbg!("SIGNATURE OF HEADER {}", core::str::from_utf8(&rsdt.h.signature).unwrap());
+        // subtracting size of header to get numbers of entries
+        let nentries =
+            (rsdt.h.length - size_of::<ACPISDTHeader>() as u32) / size_of::<usize>() as u32;
 
+        let tables_ptr = iomem::remap_phys(
+            rsdt.ptr_sdt as usize,
+            nentries as usize * size_of::<ACPISDTHeader>(),
+        )? as *const usize;
 
         dbg!("Rsdt {:p}", rsdt);
 
@@ -119,7 +130,7 @@ pub fn init() -> Result<(), &'static str> {
                 //MADT table
                 "APIC" => {
                     apic::parse_madt(header);
-                },
+                }
                 _ => {
                     // TODO Unsupported tables
                 }

@@ -14,7 +14,6 @@ use super::gdt;
 use super::cpu;
 use super::pic;
 use super::acpi;
-use super::iomem;
 
 extern "C" {
     /// Defined in linker file
@@ -93,9 +92,6 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     dbg!("Disabling PIC");
     pic::disable();
 
-    dbg!("Setup iomem");
-    // TODO fix ugly, remove altogether ?
-    let _ = iomem::init();
     // TODO this sets up the APIC behind the scene, make it more transparent
     dbg!("Reading ACPI information");
     acpi::init().unwrap();

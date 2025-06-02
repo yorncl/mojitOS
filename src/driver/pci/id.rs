@@ -44,6 +44,7 @@ fn identify_class(conf: &PCIEndpointConfig) -> PCIType {
     }
 }
 
+// Enumerate all the functions for a bus and device number
 fn enumerate_functions(bus_num: u8, dev_num: u8) {
     for fn_num in 0..=8 {
         if device_exist(bus_num, dev_num, fn_num) {
@@ -77,6 +78,7 @@ fn enumerate_functions(bus_num: u8, dev_num: u8) {
     }
 }
 
+// Will brute force through the whole PCI address space to find active functions
 pub fn enumerate() {
     for bus_num in 0..=255 {
         for dev_num in 0..32 {

@@ -1,12 +1,10 @@
 use super::{KERNEL_LINEAR_START, PAGE_SIZE};
 use crate::memory::pmm::{Frame, FrameRange};
 use crate::memory::vmm::mapper;
-use crate::utils::rawbox::RawBox;
 use crate::MB;
 use crate::{dbg, klog, kprint};
-use bitflags::{bitflags, Flags};
+use bitflags::bitflags;
 use core::arch::asm;
-use core::ops::DerefMut;
 use crate::error::{Result, codes::*};
 
 // pub static mut MAPPER: RawBox<PageDir> = RawBox {
@@ -320,7 +318,7 @@ const NPDE_EARLY: usize = 10;
 /// WARNING: this code will execute in protected mode, without paging enabled, before kstart
 /// This means that any reference to symbols must be offsetted by the kernel virtual load address
 /// we're effectively using real addresses
-/// This function will linearly mapp the first 75% of physical memory
+/// This function will linearly map the first 75% of physical memory
 #[no_mangle]
 pub extern "C" fn setup_early_paging() {
     // TODO check for PSE

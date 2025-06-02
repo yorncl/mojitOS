@@ -34,11 +34,15 @@ kernel_bootstrap:
   call setup_early_paging
   popad
 
+  ; Once the early linear mapping is done, jump to higher half
+  ; the symbol "higher_half" is addressed in 0xC.. space
+  ; we make a long jump to force a non-relative one
   push eax
   lea eax, [higher_half]
   jmp eax
 
   higher_half:
+  ; Readjust the stack to be in higher half
   add esp, HIGH_MAPPING_START
   add ebp, HIGH_MAPPING_START
   pop eax
@@ -46,6 +50,7 @@ kernel_bootstrap:
 
   push ebx ; multiboot info structure pointer
   push eax ; multiboot magic number
+  ; here we go into rust code
   call kstart
 
   cli
