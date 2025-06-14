@@ -3,7 +3,7 @@
 #[macro_export]
 macro_rules! MB {
     ($a:expr) => {
-       $a * (2 << 20)
+       $a * (1 << 20)
     };
 }
 

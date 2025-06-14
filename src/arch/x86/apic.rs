@@ -1,4 +1,4 @@
-use crate::x86::iomem;
+use crate::memory::vmm;
 use crate::{dbg, PAGE_SIZE};
 
 use super::util;
@@ -119,11 +119,11 @@ pub fn enable_lapic() {
     let (low, _high) = util::readmsr(util::msrid::LOCAL_APIC_BASE);
     let base = low as u32 & !0xfff;
     dbg!("MSR READING FOR LAPIC {:x}", base);
-    match iomem::remap_phys(base as usize, PAGE_SIZE) {
-        Ok(ptr) => unsafe {
+    match vmm::mapper::phys_to_virt(base as usize) {
+        Some(ptr) => unsafe {
             LAPIC_REMAP = ptr;
         },
-        Err(msg) => panic!("Could not remap IOAPIC base: {}", msg),
+        None => panic!("Could not translate IOAPIC base address: {}", base),
     }
     // Setting the last entry in IDT for the spurious interrupts with 0xff
     // setting the 8th bit to enable the local APIC
@@ -164,12 +164,13 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
                     dbg!("IOAPIC id {:x}", { ioptr.id });
                     dbg!("IOAPIC base {:x}", { ioptr.address });
                     dbg!("IOAPIC gib {:x}", { ioptr.gib });
+                    dbg!("IOAPIC phys address {:x}", { ioptr.address });
                     // IO APIC
-                    match iomem::remap_phys({ ioptr.address } as usize, PAGE_SIZE) {
-                        Ok(ptr) => {
+                    match vmm::mapper::phys_to_virt({ ioptr.address } as usize) {
+                        Some(ptr) => {
                             IOAPIC_REMAP = ptr;
                         }
-                        Err(msg) => panic!("Could not remap IOAPIC base: {}", msg),
+                        None => panic!("Could not translate IOAPIC base address: {}", {ioptr.address}),
                     }
                 }
                 0x02 => {

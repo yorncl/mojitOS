@@ -72,8 +72,6 @@ pub fn init() -> Result<(), &'static str> {
         Err(()) => panic!("Didn't find RSDP"),
     }
 
-    // TODO checksum?
-    let mut ptr = rsdp as *const XSDPT as *const u8;
 
     // TODO handle version > 1.0
     if rsdp.revision != 0 {
@@ -86,6 +84,7 @@ pub fn init() -> Result<(), &'static str> {
     // Physical address
     let rsdt_addr = { rsdp.rsdt_address } as usize;
     dbg!("rsdt address {:x}", rsdt_addr);
+
 
     // // TODO used to make sense before the linear mapping
     // if vmm::mapper::virt_to_phys_kernel(vmm::mapper::phys_to_virt(rsdt_addr).unwrap()) == None {
@@ -104,6 +103,7 @@ pub fn init() -> Result<(), &'static str> {
             { rsdt.h.length },
             size_of::<ACPISDTHeader>()
         );
+
         dbg!("SIGNATURE OF HEADER {}", core::str::from_utf8(&rsdt.h.signature).unwrap());
         // subtracting size of header to get numbers of entries
         let nentries =

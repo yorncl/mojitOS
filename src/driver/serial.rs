@@ -24,7 +24,6 @@ macro_rules! dbg {
         };
 }
 
-
 struct SerialDriver {
      com1: Pio<u8>
 }

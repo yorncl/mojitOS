@@ -47,9 +47,9 @@ kernel_bootstrap:
   add ebp, HIGH_MAPPING_START
   pop eax
 
-
   push ebx ; multiboot info structure pointer
   push eax ; multiboot magic number
+
   ; here we go into rust code
   call kstart
 

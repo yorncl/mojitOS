@@ -34,6 +34,7 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     vga::io_init();
     klog!("Early boot setup...");
 
+
     // Cpu features requirements
     cpu::cpuid_fetch();
     if !cpu::has_feature(cpu::Flags::MSR) {
@@ -74,6 +75,8 @@ pub extern "C" fn kstart(_magic: u32, mboot: *const u32) -> !
     gdt::load();
     dbg!("Loading IDT");
     idt::setup();
+
+
 
     paging::cleanup_post_jump();
     // This will filter out unusable pages

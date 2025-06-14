@@ -104,7 +104,7 @@ bitflags! {
 
 // type PDE = u32;
 type PTE = u32;
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 struct PDE(u32);
 
 // Je suis dans ma paranoia
@@ -113,7 +113,11 @@ const _: [u8; 1024 * 4] = [0; core::mem::size_of::<PageDir>()];
 
 impl PDE {
     const fn new(address: u32, flags: PDEF) -> PDE {
-        PDE(address | flags.bits())
+        PDE((address & !0x1fff) | flags.bits())
+    }
+
+    const fn has_flag(&mut self, flag: PDEF) -> bool {
+        PDEF::from_bits(self.0).unwrap().contains(flag)
     }
 }
 
@@ -132,20 +136,28 @@ impl PageDir {
     pub fn dump_dbg(&self) {
         dbg!("Dumping page directory");
         for i in 0..1024 {
-            if self.entries[i].0 != 0 {
+            let entry = {self.entries[i].0 as u32};
+            if entry != 0 {
                 dbg!(
-                    " pd entry {} -> {:x} ({:x} - {:x})",
+                    // " pd entry {} -> {:x} ({:x} - {:x})",
+                    " pd entry {}: {:x}",
                     i,
                     self.entries[i].0,
-                    ((i as usize) << 22),
-                    ((i + 1 as usize) << 22)
+                    // ((i as usize) << 22),
+                    // ((i + 1 as usize) << 22)
                 );
+                if PDE(entry).has_flag(PDEF::PageSize) {
+                    let addr = entry & !((1 << 12)- 1);
+                    dbg!("  4MB from {:x} to {:x}", addr, addr + MB!(4));
+                    continue;
+                }
+
                 let special = (0x3ff << 22) | i << 12;
                 dbg!("  Page table");
                 let pt: &mut PageTable = unsafe { &mut *(special as *mut PageTable) };
 
                 let mut count = -1;
-                let mut prev: u32 = { pt.entries[0] };
+                let mut prev: u32 = entry;
                 let mut pdelta: i64 = 0;
                 // continue;
 
@@ -312,13 +324,12 @@ impl mapper::MapperInterface for PageDir {
     }
 }
 
-/// Number of entries of 4MB to identity map in  the beginning
+/// NPDE_EAERLY * 4MB = memory to identity map before jumping to higher half
 const NPDE_EARLY: usize = 10;
 
 /// WARNING: this code will execute in protected mode, without paging enabled, before kstart
 /// This means that any reference to symbols must be offsetted by the kernel virtual load address
 /// we're effectively using real addresses
-/// This function will linearly map the first 75% of physical memory
 #[no_mangle]
 pub extern "C" fn setup_early_paging() {
     // TODO check for PSE
@@ -339,7 +350,7 @@ pub extern "C" fn setup_early_paging() {
     // We need this because we will return to a lower half physical address
     // This will get cleared up post higher half jump
     for i in 0..NPDE_EARLY {
-        let phys_addr = (MB!(4) * i) as u32;
+        let phys_addr = MB!(4) * i as u32;
         pd_ptr.entries[i] = PDE::new(phys_addr, PDEF::Present | PDEF::PageSize | PDEF::Write);
     }
     // Setting up the linear mapping
@@ -355,13 +366,15 @@ pub extern "C" fn setup_early_paging() {
         );
     }
     activate_paging();
+    // because paranoia is sometimes the right attitude
+    flush_tlb();
 }
 
 /// Activate paging and PSE
 #[no_mangle]
 pub extern "C" fn activate_paging() {
     unsafe {
-        // activate pse, move KERNEL_PD to cr3 and activate paging bit
+        // enable pse, move KERNEL_PD to cr3 and enable paging bit
         asm!(
             concat!(
                 "
@@ -373,7 +386,7 @@ pub extern "C" fn activate_paging() {
             mov cr3, eax
 
             mov eax, cr0
-            or eax, 0x80000000
+            or eax, 0x80000001
             mov cr0, eax"
             ),
             in("ecx") 1 << 4,

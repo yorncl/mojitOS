@@ -55,6 +55,7 @@ Temporary mappings
 /// Start of the linear identity mapping
 pub const KERNEL_LINEAR_START: usize = 0xC0000000;
 /// Virtual memory mapping area
+/// The higher mapping will be swapped as needed, CF linux x86 memory model
 pub const KERNEL_TEMP_START: usize = 0xf0000000;
 
 pub const PAGE_SIZE: usize = 0x1000;

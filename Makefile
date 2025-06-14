@@ -60,10 +60,9 @@ run: update_mnt $(DISK_IMG)
 run_int: update_mnt $(DISKIMG)
 	$(QEMU) --enable-kvm -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -serial stdio -no-reboot -d int,cpu_reset
 
-klib_test:
-	$(CARGO) test --no-run
-
-debug: $(NAME) $(DISKIMG) update_mnt
+run_gdb: $(NAME) $(DISKIMG) update_mnt
 	$(QEMU) --enable-kvm -drive format=raw,file=$(DISK_IMG),if=none,id=disk1 -device ide-hd,drive=disk1 -s -S -no-reboot -serial stdio
 
+klib_test:
+	$(CARGO) test --no-run
 .PHONE: all clean run debug link asm
