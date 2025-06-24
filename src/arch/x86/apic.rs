@@ -170,7 +170,7 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
                         Some(ptr) => {
                             IOAPIC_REMAP = ptr;
                         }
-                        None => panic!("Could not translate IOAPIC base address: {}", {ioptr.address}),
+                        None => panic!("Could not translate IOAPIC base address: {:x}", {ioptr.address}),
                     }
                 }
                 0x02 => {

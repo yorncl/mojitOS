@@ -1,6 +1,5 @@
 use crate::dbg;
 use crate::memory::vmm::{self, mapper};
-use crate::x86::iomem;
 
 use super::apic;
 use core::mem::size_of;
@@ -92,7 +91,7 @@ pub fn init() -> Result<(), &'static str> {
     // }
     unsafe {
         // MMIO remap the zone where the RSDT is
-        let rsdt: &RSDT = &*(iomem::remap_phys(rsdt_addr, size_of::<RSDT>())? as *const RSDT);
+        let rsdt: &RSDT = &*(mapper::phys_to_virt(rsdt_addr).unwrap() as *const RSDT);
         // let rsdt: &RSDT = &*(rsdt_addr as *const RSDT);
 
         dbg!("Rsdt {:p}", rsdt);
@@ -108,11 +107,7 @@ pub fn init() -> Result<(), &'static str> {
         // subtracting size of header to get numbers of entries
         let nentries =
             (rsdt.h.length - size_of::<ACPISDTHeader>() as u32) / size_of::<usize>() as u32;
-
-        let tables_ptr = iomem::remap_phys(
-            rsdt.ptr_sdt as usize,
-            nentries as usize * size_of::<ACPISDTHeader>(),
-        )? as *const usize;
+        let tables_ptr = mapper::phys_to_virt(rsdt.ptr_sdt as usize).unwrap() as *const usize;
 
         dbg!("Rsdt {:p}", rsdt);
 

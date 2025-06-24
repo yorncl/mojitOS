@@ -1,11 +1,11 @@
 use super::{KERNEL_LINEAR_START, PAGE_SIZE};
+use crate::error::{codes::*, Result};
 use crate::memory::pmm::{Frame, FrameRange};
 use crate::memory::vmm::mapper;
 use crate::MB;
 use crate::{dbg, klog, kprint};
 use bitflags::bitflags;
 use core::arch::asm;
-use crate::error::{Result, codes::*};
 
 // pub static mut MAPPER: RawBox<PageDir> = RawBox {
 //     data: 0 as *mut PageDir,
@@ -51,6 +51,8 @@ macro_rules! is_page_aligned {
 
 #[no_mangle]
 static mut KERNEL_PD: PageDir = PageDir::new();
+// Where IO will be remapped
+static mut IO_REMAP_PT: PageTable = PageTable::new();
 
 pub(crate) use ROUND_PAGE_UP;
 
@@ -136,7 +138,7 @@ impl PageDir {
     pub fn dump_dbg(&self) {
         dbg!("Dumping page directory");
         for i in 0..1024 {
-            let entry = {self.entries[i].0 as u32};
+            let entry = { self.entries[i].0 as u32 };
             if entry != 0 {
                 dbg!(
                     // " pd entry {} -> {:x} ({:x} - {:x})",
@@ -147,7 +149,7 @@ impl PageDir {
                     // ((i + 1 as usize) << 22)
                 );
                 if PDE(entry).has_flag(PDEF::PageSize) {
-                    let addr = entry & !((1 << 12)- 1);
+                    let addr = entry & !((1 << 12) - 1);
                     dbg!("  4MB from {:x} to {:x}", addr, addr + MB!(4));
                     continue;
                 }
@@ -198,6 +200,12 @@ fn flush_tlb() {
 #[repr(C, packed)]
 struct PageTable {
     pub entries: [PTE; 1024],
+}
+
+impl PageTable {
+    const fn new() -> Self {
+        PageTable { entries: [0; 1024] }
+    }
 }
 
 #[inline(always)]
@@ -292,7 +300,7 @@ impl mapper::MapperInterface for PageDir {
         let pte_offset = pte_index!(address);
         let offset = offset!(address);
         // Check if this entry is mapped, else we stop
-        
+
         let pde = self.entries[pde_index];
         if pde.0 == 0 {
             return None;
@@ -309,18 +317,34 @@ impl mapper::MapperInterface for PageDir {
             return Some(addr);
         }
 
-
-        let pt = unsafe { &*((self.entries[pde_index].0 as usize + super::KERNEL_LINEAR_START) as *const PageTable)};
+        let pt = unsafe {
+            &*((self.entries[pde_index].0 as usize + super::KERNEL_LINEAR_START)
+                as *const PageTable)
+        };
         let addr = pt.entries[pte_offset] as usize + offset;
         dbg!("Virt_to_phys output {:x}", addr);
         Some(addr)
     }
 
     fn phys_to_virt(&self, address: usize) -> Option<usize> {
-        if address > (super::KERNEL_TEMP_START - super::KERNEL_LINEAR_START) {
-            return None
+        if address > super::KERNEL_TEMP_START {
+            todo!();
+            return None;
         }
         Some(KERNEL_LINEAR_START + address)
+    }
+
+    fn io_remap(&self, f: FrameRange) -> Option<usize> {
+        //         let start: usize = 0;
+        //         let end: usize = 0;
+        //         for i in 0..1024 {
+
+        //             unsafe {
+        //                if IO_REMAP_PT.entries[i] == 0 {
+        //             }
+        //             }
+        //         }
+        todo!();
     }
 }
 
@@ -365,6 +389,12 @@ pub extern "C" fn setup_early_paging() {
             PDEF::Present | PDEF::PageSize | PDEF::Write | PDEF::Global,
         );
     }
+
+    // Last entry is remaping for IO
+    pd_ptr.entries[1023] = PDE::new(
+        core::ptr::addr_of_mut!(KERNEL_PD) as u32 - super::KERNEL_LINEAR_START as u32,
+        PDEF::Present | PDEF::PageSize | PDEF::Write | PDEF::Global,
+    );
     activate_paging();
     // because paranoia is sometimes the right attitude
     flush_tlb();

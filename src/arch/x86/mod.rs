@@ -13,7 +13,6 @@ pub mod timer;
 mod acpi;
 mod apic;
 // mod bootmem;
-mod iomem;
 mod util;
 
 /*
@@ -49,14 +48,17 @@ Around 800meg (0x30000000)
 ------------------- 0xf0000000
 
 Temporary mappings
+------------------- 0xffbfffff
 
 */
 
-/// Start of the linear identity mapping
+/// Start of the linear identity mapping of the physical memory
 pub const KERNEL_LINEAR_START: usize = 0xC0000000;
-/// Virtual memory mapping area
+/// Virtual memory mapping area, no fixed mappings
 /// The higher mapping will be swapped as needed, CF linux x86 memory model
 pub const KERNEL_TEMP_START: usize = 0xf0000000;
+// The last 4MB of virtual space will be used to remap some addresses for IO devices (eg. IOAPIC) 
+pub const KERNEL_IO_REMAP: usize = 0xffbfffff;
 
 pub const PAGE_SIZE: usize = 0x1000;
 pub const N_PAGES: usize = 1 << 20;

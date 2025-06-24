@@ -19,6 +19,9 @@ pub trait MapperInterface
     /// Takes a virtual address and returns the corresponding virtual address
     /// Works if the address is within the kernel's linear mapping of physical memory
     fn phys_to_virt(&self, address: usize) -> Option<usize>;
+    // Used to remap physical IO pages to dedicated IO virtual memory space if necessay
+    // eg. IOAPIC
+    fn io_remap(&self, f: FrameRange) -> Option<usize>;
 }
 
 /// Map a single frame
@@ -57,4 +60,10 @@ pub fn unmap_single_kernel(address: usize) -> Result<()> {
 #[inline(always)]
 pub fn unmap_range_kernel(address: usize, n: usize) -> Result<()> {
     kernel_mapper().unmap_range(address, n)
+}
+
+/// Unmap a virtual frame range
+#[inline(always)]
+pub fn io_remap(f: FrameRange) -> Option<usize> {
+    kernel_mapper().io_remap(f)
 }
