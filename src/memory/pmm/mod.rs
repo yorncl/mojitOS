@@ -12,6 +12,12 @@ use crate::dbg;
 /// architecture, beyond that it is a page based system
 pub struct Frame(pub usize);
 
+impl Frame {
+    fn from_address(addr: usize) -> Frame {
+        Frame(addr/PAGE_SIZE)
+    }
+}
+
 impl fmt::Display for Frame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {})", self.0, self.0)

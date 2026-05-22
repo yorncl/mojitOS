@@ -21,7 +21,7 @@ pub trait MapperInterface
     fn phys_to_virt(&self, address: usize) -> Option<usize>;
     // Used to remap physical IO pages to dedicated IO virtual memory space if necessay
     // eg. IOAPIC
-    fn io_remap(&self, f: FrameRange) -> Option<usize>;
+    fn io_remap(&mut self, f: FrameRange) -> Option<usize>;
 }
 
 /// Map a single frame
@@ -62,8 +62,10 @@ pub fn unmap_range_kernel(address: usize, n: usize) -> Result<()> {
     kernel_mapper().unmap_range(address, n)
 }
 
-/// Unmap a virtual frame range
+/// Remap a physical IO address in virtual IO space
+/// TODO the API is inconsistent with other functions, might want to pick only one
 #[inline(always)]
-pub fn io_remap(f: FrameRange) -> Option<usize> {
-    kernel_mapper().io_remap(f)
+pub fn io_remap(address: usize, n: usize) -> Option<usize> {
+    todo!()
+    // kernel_mapper().io_remap(f)
 }

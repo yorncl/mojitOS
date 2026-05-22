@@ -1,3 +1,4 @@
+use crate::memory::pmm::Frame;
 use crate::memory::vmm;
 use crate::{dbg, PAGE_SIZE};
 
@@ -166,12 +167,7 @@ pub fn parse_madt(address: *const ACPISDTHeader) {
                     dbg!("IOAPIC gib {:x}", { ioptr.gib });
                     dbg!("IOAPIC phys address {:x}", { ioptr.address });
                     // IO APIC
-                    match vmm::mapper::phys_to_virt({ ioptr.address } as usize) {
-                        Some(ptr) => {
-                            IOAPIC_REMAP = ptr;
-                        }
-                        None => panic!("Could not translate IOAPIC base address: {:x}", {ioptr.address}),
-                    }
+                    vmm::mapper::io_remap({ioptr.address} as usize, 1);
                 }
                 0x02 => {
                     let source: &EntrySourceOverride = &*(entry_addr as *const EntrySourceOverride);

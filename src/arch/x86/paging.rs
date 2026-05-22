@@ -326,6 +326,7 @@ impl mapper::MapperInterface for PageDir {
         Some(addr)
     }
 
+    // TODO implement translation of IO Mapping ?
     fn phys_to_virt(&self, address: usize) -> Option<usize> {
         if address > super::KERNEL_TEMP_START {
             todo!();
@@ -334,17 +335,36 @@ impl mapper::MapperInterface for PageDir {
         Some(KERNEL_LINEAR_START + address)
     }
 
-    fn io_remap(&self, f: FrameRange) -> Option<usize> {
-        //         let start: usize = 0;
-        //         let end: usize = 0;
-        //         for i in 0..1024 {
-
-        //             unsafe {
-        //                if IO_REMAP_PT.entries[i] == 0 {
-        //             }
-        //             }
-        //         }
-        todo!();
+    //TODO this API feels clunky, might switch to a higher level
+    fn io_remap(&mut self, f: FrameRange) -> Option<usize> {
+        let mut start: usize = 0;
+        let mut size: usize = 0;
+        let mut i = 0;
+        while i < 1024 {
+            unsafe {
+                if IO_REMAP_PT.entries[i] == 0 {
+                    start = i;
+                    size = 0;
+                    while i < 1024 && IO_REMAP_PT.entries[i] == 0 {
+                        size += 1;
+                        i += 1;
+                        // found a slot that match our requirement
+                        if f.size == size {
+                            self.map_range(
+                                FrameRange {
+                                    start: Frame(start),
+                                    size,
+                                },
+                                super::KERNEL_IO_REMAP + start * PAGE_SIZE,
+                            )
+                            .unwrap();
+                        }
+                    }
+                    size = 0;
+                }
+            }
+        }
+        panic!("impossile to IO remap!");
     }
 }
 

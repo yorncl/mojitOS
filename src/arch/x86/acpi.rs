@@ -4,6 +4,7 @@ use crate::memory::vmm::{self, mapper};
 use super::apic;
 use core::mem::size_of;
 use core::ptr::addr_of;
+use core::ptr;
 
 static RSDP_SIGNATURE: u64 = u64::from_le_bytes(*b"RSD PTR ");
 
@@ -63,8 +64,9 @@ pub fn init() -> Result<(), &'static str> {
                 rsdp = &*(address as *const XSDPT);
             }
             dbg!(
-                "Found RSDP, SIGNATURE {}",
-                core::str::from_utf8(&rsdp.signature).unwrap()
+                "Found RSDP, SIGNATURE: \"{}\", RSDT ADDRESS: {:x}",
+                core::str::from_utf8(&rsdp.signature).unwrap(),
+                {rsdp.rsdt_address}
             );
         }
         // TODO check the checksum
@@ -80,57 +82,36 @@ pub fn init() -> Result<(), &'static str> {
         );
     }
 
-    // Physical address
-    let rsdt_addr = { rsdp.rsdt_address } as usize;
-    dbg!("rsdt address {:x}", rsdt_addr);
 
-
-    // // TODO used to make sense before the linear mapping
-    // if vmm::mapper::virt_to_phys_kernel(vmm::mapper::phys_to_virt(rsdt_addr).unwrap()) == None {
-    //     return Err("ACPI tables aren't mapped");
-    // }
     unsafe {
-        // MMIO remap the zone where the RSDT is
-        let rsdt: &RSDT = &*(mapper::phys_to_virt(rsdt_addr).unwrap() as *const RSDT);
-        // let rsdt: &RSDT = &*(rsdt_addr as *const RSDT);
+        // Physical address
+        let rsdt_addr = mapper::phys_to_virt(rsdp.rsdt_address as usize).unwrap() as usize;
+        dbg!("---- >rsdt address {:x}", rsdt_addr);
+        let rsdt: &RSDT = &*(rsdt_addr as *const RSDT);
 
-        dbg!("Rsdt {:p}", rsdt);
-
-        // MMIO remap the zone where the entries pointed by the RSDT are
-        dbg!(
-            "Rsdt len {} vs {}",
-            { rsdt.h.length },
-            size_of::<ACPISDTHeader>()
-        );
-
-        dbg!("SIGNATURE OF HEADER {}", core::str::from_utf8(&rsdt.h.signature).unwrap());
-        // subtracting size of header to get numbers of entries
+        dbg!("SIGNATURE OF RSDT HEADER: \"{}\"", core::str::from_utf8(&rsdt.h.signature).unwrap());
+        // calculating number of entries
         let nentries =
             (rsdt.h.length - size_of::<ACPISDTHeader>() as u32) / size_of::<usize>() as u32;
-        let tables_ptr = mapper::phys_to_virt(rsdt.ptr_sdt as usize).unwrap() as *const usize;
 
-        dbg!("Rsdt {:p}", rsdt);
+        // get pointer to array of addresses that is at the end of the rsdt structure
+        let mut table_ptr:usize = addr_of!(rsdt.ptr_sdt) as usize;
+        dbg!("table_ptr = {:x}", table_ptr);
 
-        // recompute the offsets in the table
-        let base_phys: usize = rsdt.ptr_sdt as usize;
-        // tables_ptr is the virtual pointer to where the tables are actually stored
-        let base_virt = tables_ptr as usize;
-        // ptr is the pointer to the entries of the array
-        // each entry will then point to the physical location of the corresponding table
-        let mut ptr = addr_of!(rsdt.ptr_sdt);
         for _i in 0..nentries {
-            let entry = base_virt + (*ptr as usize - base_phys);
-            let header = &*(entry as *const ACPISDTHeader);
-            match core::str::from_utf8(&header.signature).unwrap() {
+            dbg!("=========== ");
+            let entry_addr = mapper::phys_to_virt(ptr::read_unaligned(table_ptr as *const u32) as usize).unwrap() as *const ACPISDTHeader;
+            let entry = &*(entry_addr);
+            match core::str::from_utf8(&entry.signature).unwrap() { 
                 //MADT table
                 "APIC" => {
-                    apic::parse_madt(header);
+                    apic::parse_madt(entry);
                 }
                 _ => {
                     // TODO Unsupported tables
                 }
             }
-            ptr = ptr.offset(1);
+            table_ptr += 4;
         }
     }
     Ok(())
